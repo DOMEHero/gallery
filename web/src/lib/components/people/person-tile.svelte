@@ -17,10 +17,26 @@
     thumbnailQueue?: ThumbnailLoadQueue;
     actionMenu?: Snippet;
     footer?: Snippet;
+    onDragStart?: (event: DragEvent, person: ManagedPerson) => void;
+    onDragEnd?: () => void;
+    canDrop?: (person: ManagedPerson) => boolean;
+    onDrop?: (event: DragEvent, person: ManagedPerson) => void | Promise<void>;
   }
 
-  let { person, showActionMenu = true, deferThumbnail = false, thumbnailQueue, actionMenu, footer }: Props = $props();
+  let {
+    person,
+    showActionMenu = true,
+    deferThumbnail = false,
+    thumbnailQueue,
+    actionMenu,
+    footer,
+    onDragStart,
+    onDragEnd,
+    canDrop,
+    onDrop,
+  }: Props = $props();
   let showActions = $state(false);
+  let isDropTarget = $state(false);
   let groupElement: HTMLDivElement;
 
   const hideActionsUnlessFocused = () => {
@@ -33,7 +49,37 @@
 <div
   bind:this={groupElement}
   class="relative"
+  class:cursor-grab={!!onDragStart}
   role="group"
+  draggable={!!onDragStart}
+  ondragstart={(event) => onDragStart?.(event, person)}
+  ondragend={() => {
+    isDropTarget = false;
+    onDragEnd?.();
+  }}
+  ondragover={(event) => {
+    if (!canDrop?.(person)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    isDropTarget = true;
+  }}
+  ondragleave={() => (isDropTarget = false)}
+  ondrop={(event) => {
+    if (!canDrop?.(person)) {
+      return;
+    }
+
+    event.preventDefault();
+    isDropTarget = false;
+    void onDrop?.(event, person);
+  }}
+  class:ring-2={isDropTarget}
+  class:ring-primary={isDropTarget}
   onmouseenter={() => (showActions = true)}
   onmouseleave={hideActionsUnlessFocused}
   use:focusOutside={{ onFocusOut: () => (showActions = false) }}

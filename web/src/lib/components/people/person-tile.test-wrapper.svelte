@@ -7,13 +7,16 @@
     person: ManagedPerson;
     showActionMenu?: boolean;
     showFooter?: boolean;
+    onDragStart?: (event: DragEvent, person: ManagedPerson) => void;
+    canDrop?: (person: ManagedPerson) => boolean;
+    onDrop?: (event: DragEvent, person: ManagedPerson) => void | Promise<void>;
   }
 
-  let { person, showActionMenu = false, showFooter = false }: Props = $props();
+  let { person, showActionMenu = false, showFooter = false, onDragStart, canDrop, onDrop }: Props = $props();
 </script>
 
 <TooltipProvider>
-  <PersonTile {person} {showActionMenu}>
+  <PersonTile {person} {showActionMenu} {onDragStart} {canDrop} {onDrop}>
     {#snippet actionMenu()}
       {#if showActionMenu}
         <button type="button">Actions</button>

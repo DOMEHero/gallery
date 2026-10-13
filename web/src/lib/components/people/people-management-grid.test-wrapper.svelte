@@ -15,6 +15,7 @@
     canShowActions?: boolean;
     onNameSubmit?: (name: string, person: Person) => void | Promise<void>;
     onAction?: (person: Person) => void;
+    onDropMerge?: (sourceId: string, target: Person) => void | Promise<void>;
     loadNextPage?: () => void;
     deferThumbnails?: boolean;
     thumbnailConcurrency?: number;
@@ -26,6 +27,7 @@
     canShowActions = true,
     onNameSubmit = () => {},
     onAction = () => {},
+    onDropMerge,
     loadNextPage = () => {},
     deferThumbnails = false,
     thumbnailConcurrency = 8,
@@ -47,6 +49,7 @@
   {canEditNames}
   {canShowActions}
   {onNameSubmit}
+  {onDropMerge}
   {loadNextPage}
   {deferThumbnails}
   {thumbnailConcurrency}

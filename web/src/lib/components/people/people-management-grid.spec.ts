@@ -43,6 +43,37 @@ describe('PeopleManagementGrid', () => {
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ id: 'person-1' }));
   });
 
+  it('uses a compact drag label and merges the dragged person into the drop target', async () => {
+    const onDropMerge = vi.fn();
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: (type: string, value: string) => transferData.set(type, value),
+      getData: (type: string) => transferData.get(type) ?? '',
+      setDragImage: vi.fn(),
+    } as unknown as DataTransfer;
+
+    render(PeopleManagementGridWrapper, {
+      props: {
+        people: [
+          { id: 'source-person', name: 'Mochi' },
+          { id: 'target-person', name: 'Luna' },
+        ],
+        onDropMerge,
+      },
+    });
+
+    const source = screen.getByRole('link', { name: 'Mochi' }).closest('[role="group"]')!;
+    const target = screen.getByRole('link', { name: 'Luna' }).closest('[role="group"]')!;
+    await fireEvent.dragStart(source, { dataTransfer });
+    await fireEvent.dragOver(target, { dataTransfer });
+    await fireEvent.drop(target, { dataTransfer });
+
+    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+    expect(onDropMerge).toHaveBeenCalledWith('source-person', expect.objectContaining({ id: 'target-person' }));
+  });
+
   it('does not assign thumbnail src for deferred offscreen tiles', () => {
     class NeverIntersectingObserver {
       observe = vi.fn();

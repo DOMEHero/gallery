@@ -656,6 +656,74 @@ describe('Global people page', () => {
     expect(gotoMock).toHaveBeenCalledWith('/people/p1?previousRoute=%2Fpeople&action=merge');
   });
 
+  it('merges a dragged person into the drop target without showing a confirmation dialog', async () => {
+    const source = makePerson({ id: 'source-person', name: 'Mochi', numberOfAssets: 2 });
+    const target = makePerson({ id: 'target-person', name: 'Luna', numberOfAssets: 3 });
+    // A global identity read can resolve to a different primary profile after a cross-scope
+    // merge. The drop target's profile must still remain in this list.
+    const mergedTarget = makePerson({ id: source.id, name: target.name, numberOfAssets: 5 });
+    sdkMock.mergePersonLegacy.mockResolvedValue([{ id: source.id, success: true }]);
+    sdkMock.getPerson.mockResolvedValue(mergedTarget);
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: (type: string, value: string) => transferData.set(type, value),
+      getData: (type: string) => transferData.get(type) ?? '',
+    } as unknown as DataTransfer;
+
+    renderPage([source, target]);
+    const sourceGroup = screen.getByRole('link', { name: source.name }).closest('[role="group"]');
+    const targetGroup = screen.getByRole('link', { name: target.name }).closest('[role="group"]');
+    expect(sourceGroup).not.toBeNull();
+    expect(targetGroup).not.toBeNull();
+
+    await fireEvent.dragStart(sourceGroup!, { dataTransfer });
+    await fireEvent.dragOver(targetGroup!, { dataTransfer });
+    await fireEvent.drop(targetGroup!, { dataTransfer });
+
+    await waitFor(() =>
+      expect(sdkMock.mergePersonLegacy).toHaveBeenCalledWith({
+        id: target.id,
+        mergePersonDto: { ids: [source.id] },
+      }),
+    );
+    expect(sdkMock.getPerson).toHaveBeenCalledWith({ id: target.id });
+    expect(screen.queryByRole('link', { name: source.name })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: target.name })).toBeInTheDocument();
+  });
+
+  it('keeps the drop target in its grid position when its merged asset count changes', async () => {
+    const source = makePerson({ id: 'source-person', name: 'Mochi', numberOfAssets: 10 });
+    const middle = makePerson({ id: 'middle-person', name: 'Poppy', numberOfAssets: 6 });
+    const target = makePerson({ id: 'target-person', name: 'Luna', numberOfAssets: 3 });
+    sdkMock.mergePersonLegacy.mockResolvedValue([{ id: source.id, success: true }]);
+    sdkMock.getPerson.mockResolvedValue(makePerson({ ...target, numberOfAssets: 13 }));
+
+    const transferData = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: (type: string, value: string) => transferData.set(type, value),
+      getData: (type: string) => transferData.get(type) ?? '',
+    } as unknown as DataTransfer;
+
+    renderPage([source, middle, target]);
+    const sourceGroup = screen.getByRole('link', { name: source.name }).closest('[role="group"]')!;
+    const targetGroup = screen.getByRole('link', { name: target.name }).closest('[role="group"]')!;
+
+    await fireEvent.dragStart(sourceGroup, { dataTransfer });
+    await fireEvent.dragOver(targetGroup, { dataTransfer });
+    await fireEvent.drop(targetGroup, { dataTransfer });
+
+    await waitFor(() => expect(screen.queryByRole('link', { name: source.name })).not.toBeInTheDocument());
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('aria-label'))).toEqual([
+      middle.name,
+      target.name,
+    ]);
+  });
+
   it('routes a space-primary person to identity-wide person detail', () => {
     renderPage([
       makePerson({

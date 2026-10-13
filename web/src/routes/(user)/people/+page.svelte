@@ -23,16 +23,23 @@
   import { websocketEvents } from '$lib/stores/websocket';
   import { normalizeSearchString } from '$lib/utils/string-utils';
   import { handlePromiseError } from '$lib/utils';
+  import {
+    createCrossOwnerMergeHandlers,
+    runMergeWithCrossOwnerConfirmation,
+    runScopedMergeWithCrossOwnerConfirmation,
+  } from '$lib/utils/cross-owner-merge';
   import { getGlobalPersonHref, getGlobalPersonThumbnailUrl } from '$lib/utils/global-person-route';
   import { handleError } from '$lib/utils/handle-error';
   import { clearQueryParam } from '$lib/utils/navigation';
   import { peopleFilterToTypeParam as filterToTypeParam, resolvePeopleFilterBy } from '$lib/utils/people-filter';
   import { appendUniqueById, sortPeople } from '$lib/utils/people-utils';
   import { formatPeopleHeaderDescription } from '$lib/utils/people-statistics';
+  import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
   import {
     getAllPeople,
     getPeopleFaceStatistics,
     getPerson,
+    mergePersonLegacy,
     searchPerson,
     updatePerson,
     type PersonResponseDto,
@@ -68,6 +75,10 @@
   let potentialMergePeople: PersonResponseDto[] = $state([]);
   let editingPerson: PersonResponseDto | null = $state(null);
   let searchedPeopleLocal: PersonResponseDto[] = $state([]);
+  // A merge changes asset counts (and sometimes names), both of which are normal sort keys. Keep
+  // the drop target in its current visual slot for this view so an intentional drag does not make
+  // it jump elsewhere in the grid. Changing the search or sort resets this one-shot pin.
+  let mergePinnedPosition = $state<{ personId: string; index: number; searchName: string } | null>(null);
   let searchPeopleElement = $state<ReturnType<typeof SearchPeople>>();
   // The grid has two independent next-page triggers (the IntersectionObserver and the rAF sentinel
   // re-check), and both are gated on the `loading` prop below. Without it the same page is fetched
@@ -224,6 +235,80 @@
     await goto(Route.viewPerson(detail, { previousRoute: Route.people(), action: 'merge' }));
   };
 
+  // Dragging is an explicit merge gesture, so it acknowledges the destructive cross-owner
+  // confirmation automatically. The server still enforces the instance-level permission and
+  // this keeps blocked merges on the same localized error path as the other merge entry points.
+  const handleDropMerge = async (sourceId: string, targetPerson: PersonResponseDto) => {
+    const sourcePerson = [...people, ...searchedPeopleLocal].find((person) => person.id === sourceId);
+    if (!sourcePerson || sourcePerson.id === targetPerson.id) {
+      return;
+    }
+
+    // The source disappears after a merge, so calculate the target's position among the remaining
+    // rows rather than its absolute position before the source was removed.
+    const targetIndex = showPeople
+      .filter((person) => person.id !== sourcePerson.id)
+      .findIndex((person) => person.id === targetPerson.id);
+
+    const handlers = {
+      ...createCrossOwnerMergeHandlers(),
+      confirmCrossOwner: () => Promise.resolve(true),
+    };
+
+    try {
+      const usesScopedMerge = isSpaceScopedPerson(targetPerson) || isSpaceScopedPerson(sourcePerson);
+      let classicMergeSucceeded = true;
+      const committed = usesScopedMerge
+        ? await runScopedMergeWithCrossOwnerConfirmation(
+            {
+              target: toScopedPersonRef(targetPerson),
+              sources: [toScopedPersonRef(sourcePerson)],
+            },
+            handlers,
+          )
+        : await runMergeWithCrossOwnerConfirmation(async (confirmCrossOwner) => {
+            const results = await mergePersonLegacy({
+              id: targetPerson.id,
+              mergePersonDto: confirmCrossOwner
+                ? { ids: [sourcePerson.id], confirmCrossOwner: true }
+                : { ids: [sourcePerson.id] },
+            });
+            classicMergeSucceeded = results.some(({ id, success }) => id === sourcePerson.id && success);
+          }, handlers);
+
+      if (!committed || (!usesScopedMerge && !classicMergeSucceeded)) {
+        return;
+      }
+
+      const mergedPerson = await getPerson({ id: targetPerson.id });
+      // `getPerson` may resolve a global identity to a different primary profile after a
+      // cross-scope merge (for example, a personal profile can become primary when it is merged
+      // into a space profile). The profile the user dropped onto is still the survivor in its
+      // initiating scope, so keep its id and routing metadata in this list. Otherwise removing
+      // the source and replacing the target with `mergedPerson` makes the target row disappear.
+      const mergedTarget =
+        mergedPerson.id === targetPerson.id
+          ? mergedPerson
+          : {
+              ...targetPerson,
+              ...mergedPerson,
+              id: targetPerson.id,
+              primaryProfile: targetPerson.primaryProfile,
+              filterId: targetPerson.filterId,
+            };
+      const updateMergedList = (list: PersonResponseDto[]) =>
+        list
+          .filter((person) => person.id !== sourcePerson.id)
+          .map((person) => (person.id === targetPerson.id ? mergedTarget : person));
+      people = updateMergedList(people);
+      searchedPeopleLocal = updateMergedList(searchedPeopleLocal);
+      mergePinnedPosition = targetIndex === -1 ? null : { personId: targetPerson.id, index: targetIndex, searchName };
+      toastManager.primary($t('merged_people_count', { values: { count: 1 } }));
+    } catch (error) {
+      handleError(error, $t('cannot_merge_people'));
+    }
+  };
+
   const onResetSearchBar = async () => {
     await clearQueryParam(QueryParameter.SEARCHED_PEOPLE, $page.url);
   };
@@ -271,7 +356,21 @@
       ? $peopleViewSettings.sortBy
       : PeopleSortBy.PhotoCount,
   );
-  let showPeople = $derived(sortPeople(searchName ? searchedPeopleLocal : visiblePeople, peopleSortBy));
+  let showPeople = $derived.by(() => {
+    const sortedPeople = sortPeople(searchName ? searchedPeopleLocal : visiblePeople, peopleSortBy);
+    if (!mergePinnedPosition || mergePinnedPosition.searchName !== searchName) {
+      return sortedPeople;
+    }
+
+    const currentIndex = sortedPeople.findIndex((person) => person.id === mergePinnedPosition.personId);
+    if (currentIndex === -1) {
+      return sortedPeople;
+    }
+
+    const [mergedPerson] = sortedPeople.splice(currentIndex, 1);
+    sortedPeople.splice(Math.min(mergePinnedPosition.index, sortedPeople.length), 0, mergedPerson);
+    return sortedPeople;
+  });
 
   // People-page type filter. Server-side rather than a filter over `people`: the grid is paged
   // (PEOPLE_PAGE_SIZE at a time) and pets are a small fraction of a real library, so filtering only
@@ -304,6 +403,7 @@
   let hasPeopleControls = $derived(people.length > 0 || peopleFilterBy !== PeopleFilterBy.All);
 
   const handleFilterChange = async (filterBy: PeopleFilterBy) => {
+    mergePinnedPosition = null;
     $peopleViewSettings.filterBy = filterBy;
     loadingPage = true;
     try {
@@ -328,6 +428,11 @@
   const getPersonHref = (person: PersonResponseDto) => getGlobalPersonHref(person, Route.people());
 
   const getPersonThumbnail = (person: PersonResponseDto) => getGlobalPersonThumbnailUrl(person);
+
+  const handleSortChange = (sortBy: PeopleSortBy) => {
+    mergePinnedPosition = null;
+    $peopleViewSettings.sortBy = sortBy;
+  };
 
   const isPersonalPrimary = (person: PersonResponseDto) =>
     !person.primaryProfile || person.primaryProfile.type === 'user-person';
@@ -483,7 +588,7 @@
           title={$t('sort_people_by')}
           options={peopleSortOptions}
           selectedOption={peopleSortBy}
-          onSelect={(sortBy) => ($peopleViewSettings.sortBy = sortBy)}
+          onSelect={handleSortChange}
           render={(sortBy) => ({ title: peopleSortByNames[sortBy], icon: peopleSortIcons[sortBy] })}
         />
         <Button
@@ -507,6 +612,7 @@
       canEditNames={canEditName}
       canShowActions={isPersonalPrimary}
       onNameSubmit={onNameChangeSubmit}
+      onDropMerge={handleDropMerge}
     >
       {#snippet actions(person)}
         {@const Actions = getPersonActions($t, person)}

@@ -4,6 +4,7 @@
   import PersonTile from '$lib/components/people/person-tile.svelte';
   import type { ManagedPerson } from '$lib/components/people/people-types';
   import { ThumbnailLoadQueue } from '$lib/components/people/thumbnail-load-queue.svelte';
+  import { readPersonMergeSource, setPersonMergeDragLabel, writePersonMergeSource } from '$lib/utils/person-merge-dnd';
   import type { Snippet } from 'svelte';
   import { t } from 'svelte-i18n';
 
@@ -22,6 +23,7 @@
     deferThumbnails?: boolean;
     thumbnailConcurrency?: number;
     onNameSubmit?: (name: string, person: T) => void | Promise<void>;
+    onDropMerge?: (sourceId: string, target: T) => void | Promise<void>;
     actions?: Snippet<[T]>;
   }
 
@@ -40,11 +42,13 @@
     deferThumbnails = false,
     thumbnailConcurrency = 8,
     onNameSubmit = () => {},
+    onDropMerge,
     actions,
   }: Props = $props();
 
   const getThumbnailConcurrency = () => thumbnailConcurrency;
   let editingName = $state('');
+  let activeDragSourceId = $state<string | null>(null);
   let currentThumbnailConcurrency = $state(getThumbnailConcurrency());
   let thumbnailQueue = $state(new ThumbnailLoadQueue(getThumbnailConcurrency()));
 
@@ -75,6 +79,9 @@
   const handleNameSubmit = async (person: T) => {
     await onNameSubmit(editingName, person);
   };
+
+  const canDropMerge = (target: ManagedPerson) =>
+    !!onDropMerge && !!activeDragSourceId && activeDragSourceId !== target.id;
 </script>
 
 <PeopleGrid items={people} class={gridClass} {hasNextPage} {loading} {loadNextPage}>
@@ -86,6 +93,29 @@
         showActionMenu={shouldShowActions(person)}
         deferThumbnail={deferThumbnails}
         {thumbnailQueue}
+        onDragStart={onDropMerge
+          ? (event, draggedPerson) => {
+              if (!event.dataTransfer) {
+                return;
+              }
+
+              activeDragSourceId = draggedPerson.id;
+              event.dataTransfer.effectAllowed = 'move';
+              writePersonMergeSource(event.dataTransfer, draggedPerson.id);
+              setPersonMergeDragLabel(event.dataTransfer, draggedPerson.displayName);
+            }
+          : undefined}
+        onDragEnd={onDropMerge ? () => (activeDragSourceId = null) : undefined}
+        canDrop={onDropMerge ? canDropMerge : undefined}
+        onDrop={onDropMerge
+          ? (event) => {
+              const sourceId = event.dataTransfer && readPersonMergeSource(event.dataTransfer);
+              activeDragSourceId = null;
+              if (sourceId && sourceId !== managedPerson.id) {
+                void onDropMerge(sourceId, person);
+              }
+            }
+          : undefined}
       >
         {#snippet actionMenu()}
           {@render actions?.(person)}

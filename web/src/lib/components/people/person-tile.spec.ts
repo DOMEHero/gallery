@@ -125,4 +125,34 @@ describe('PersonTile', () => {
     expect(screen.queryByLabelText('favorite')).not.toBeInTheDocument();
     expect(screen.queryByTitle('species_cat')).not.toBeInTheDocument();
   });
+
+  it('supports dragging one person onto another person', async () => {
+    const onDragStart = vi.fn();
+    const onDrop = vi.fn();
+    const canDrop = vi.fn(() => true);
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn(() => 'source-person'),
+    } as unknown as DataTransfer;
+
+    render(PersonTileWrapper, {
+      props: {
+        person: basePerson({ id: 'target-person' }),
+        onDragStart,
+        canDrop,
+        onDrop,
+      },
+    });
+
+    const group = screen.getByRole('group');
+    await fireEvent.dragStart(group, { dataTransfer });
+    await fireEvent.dragOver(group, { dataTransfer });
+    await fireEvent.drop(group, { dataTransfer });
+
+    expect(onDragStart).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'target-person' }));
+    expect(canDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'target-person' }));
+    expect(onDrop).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'target-person' }));
+  });
 });
