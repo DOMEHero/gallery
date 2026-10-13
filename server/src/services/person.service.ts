@@ -655,6 +655,8 @@ export class PersonService extends BaseService {
       isHidden: dto.isHidden,
       isFavorite: dto.isFavorite,
       color: dto.color,
+      type: dto.type,
+      species: dto.species,
     });
 
     return mapPerson(person);
@@ -706,6 +708,12 @@ export class PersonService extends BaseService {
     const nowScannable = isSuggestionScanTarget(person);
     if (featureEnabled && nowScannable && prior && prior.name !== person.name) {
       await this.jobRepository.queue({ name: JobName.PersonSuggestionScan, data: { id: personGroupId } });
+    }
+
+    // A pet name is the existing UI's explicit identity confirmation. Promote the already-stored
+    // embeddings only at that human action; routine automatic recognition never reaches here.
+    if (person.type === 'pet' && name !== undefined && person.name.trim().length > 0) {
+      await this.personRepository.markPetFacesTrusted({ personGroupId });
     }
 
     return mapPerson(person);
@@ -1587,12 +1595,19 @@ export class PersonService extends BaseService {
     // Same cross-owner policy as every other merge path (#733): a merge of your own two people can still
     // reach into someone else's library through a shared identity, and if it would combine two of THEIR
     // people it needs the instance toggle and an explicit acknowledgement. Re-pointing is free.
-    return this.identityMergePropagationService.mergePersonalPeople(
+    const results = await this.identityMergePropagationService.mergePersonalPeople(
       auth,
       id,
       dto.ids,
       await this.crossOwnerMergeAuthorizer(dto),
     );
+    // A user-initiated pet merge confirms that the survivor and its incoming detections are one
+    // identity. Trust the current survivor membership after the merge committed; it does not
+    // modify any assignments or recompute an embedding.
+    if (person.type === 'pet' && results.some(({ success }) => success)) {
+      await this.personRepository.markPetFacesTrusted({ personGroupId: id });
+    }
+    return results;
   }
 
   private async queueSpacePersonMetadataBackfill(identityId?: string | null): Promise<void> {

@@ -176,7 +176,8 @@ DROP TABLE IF EXISTS "face_repair_scan" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
 DROP TABLE IF EXISTS "face_identity" CASCADE;
 
--- Pet recognition embeddings
+-- Pet recognition embeddings and user-confirmed reference markers
+DROP TABLE IF EXISTS "pet_recognition_reference" CASCADE;
 DROP TABLE IF EXISTS "pet_search" CASCADE;
 
 -- User groups
@@ -565,6 +566,7 @@ DELETE FROM "kysely_migrations"
   '1794100000000-DropAssetIsFavoriteColumn',
   '1796000000000-AddAssetFaceCreatedBy',
   '1797000000000-AddAssetLocalDateTimeIndex',
+  '1798000000000-AddPetRecognitionReferences',
   -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs): this migration was
   -- renumbered off 1793000000000 when fork PR #1060 took that timestamp, but rolling RC instances
   -- had already recorded the pre-rename name. Drop that row too, or upstream's migrator aborts
@@ -640,7 +642,8 @@ BEGIN
       OR "name" LIKE '%AddFaceRepairLock%'
       OR "name" LIKE '%AddFaceRepairScanFlaggedFace%'
       OR "name" LIKE '%AddFaceRepairScanInFlightIndex%'
-      OR "name" LIKE '%AssetFavoriteTables%';
+      OR "name" LIKE '%AssetFavoriteTables%'
+      OR "name" LIKE '%PetRecognitionReferences%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
   END IF;
@@ -669,7 +672,7 @@ BEGIN
        'storage_migration_log', 'asset_duplicate_checksum',
        'face_person_verdict', 'face_repair_scan', 'face_repair_decline',
        'face_repair_scan_flagged_face', 'face_repair_lock',
-       'pet_search',
+       'pet_recognition_reference', 'pet_search',
        'asset_favorite_audit', 'asset_favorite'
      );
   IF fork_tables_left > 0 THEN

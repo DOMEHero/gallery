@@ -59,11 +59,14 @@ const blendedEmbedding = (firstHalfOnes: number, secondHalfOnes: number) => {
 
 const newPetFace = async (
   ctx: ReturnType<typeof setup>['ctx'],
-  input: { ownerId: string; embedding: string; personGroupId?: string | null },
+  input: { ownerId: string; embedding: string; personGroupId?: string | null; species?: string | null },
 ) => {
   const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
   const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personGroupId: input.personGroupId ?? null });
-  await ctx.database.insertInto('pet_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+  await ctx.database
+    .insertInto('pet_search')
+    .values({ faceId: assetFace.id, embedding: input.embedding, species: input.species ?? null })
+    .execute();
   return { asset, assetFace };
 };
 
@@ -152,6 +155,51 @@ describe('pet_search', () => {
     }>`SELECT indexname FROM pg_indexes WHERE tablename = 'pet_search'`.execute(ctx.database);
 
     expect(rows.map((row) => row.indexname)).toContain('pet_index');
+  });
+});
+
+describe('pet_recognition_reference', () => {
+  it('stores explicit references by species and cascades with the face', async () => {
+    const { ctx } = setup();
+    const personRepository = ctx.get(PersonRepository);
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Mimi', type: 'pet', species: 'cat' });
+    const { assetFace } = await newPetFace(ctx, {
+      ownerId: user.id,
+      embedding: axisEmbedding('first'),
+      personGroupId: person.personGroupId,
+      species: 'cat',
+    });
+
+    // An embedding and an automatic assignment alone never become supervised training data.
+    expect(
+      await ctx.database
+        .selectFrom('pet_recognition_reference')
+        .select('faceId')
+        .where('faceId', '=', assetFace.id)
+        .execute(),
+    ).toEqual([]);
+
+    await personRepository.markPetFacesTrusted({ personGroupId: person.personGroupId, faceIds: [assetFace.id] });
+
+    const references = await personRepository.getTrustedPetReferences({ ownerId: user.id, species: 'cat' });
+    expect(references).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ faceId: assetFace.id, name: 'Mimi', personGroupId: person.personGroupId }),
+      ]),
+    );
+    expect(await personRepository.getTrustedPetReferenceVersion({ ownerId: user.id, species: 'cat' })).toMatch(/^1:/);
+    expect(await personRepository.getTrustedPetReferences({ ownerId: user.id, species: 'dog' })).toEqual([]);
+
+    await ctx.database.deleteFrom('asset_face').where('id', '=', assetFace.id).execute();
+
+    expect(
+      await ctx.database
+        .selectFrom('pet_recognition_reference')
+        .select('faceId')
+        .where('faceId', '=', assetFace.id)
+        .execute(),
+    ).toEqual([]);
   });
 });
 

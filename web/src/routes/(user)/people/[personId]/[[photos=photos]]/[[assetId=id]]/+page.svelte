@@ -807,7 +807,7 @@
         <DownloadAction menuItem filename={person.name || 'immich'} />
         <MenuOption
           icon={mdiAccountMultipleCheckOutline}
-          text={$t('fix_incorrect_match')}
+          text={$t(person.type === 'pet' ? 'move_to_another_pet' : 'fix_incorrect_match')}
           onClick={handleReassignAssets}
         />
         <ChangeDate menuItem />

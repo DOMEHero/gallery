@@ -4,6 +4,7 @@
   import {
     createPerson,
     getAllPeople,
+    PersonEntityType,
     reassignFaces,
     type AssetFaceUpdateItem,
     type PersonResponseDto,
@@ -35,6 +36,7 @@
   let showLoadingSpinnerCreate = $state(false);
   let showLoadingSpinnerReassign = $state(false);
   let hasSelection = $state(false);
+  const isPet = personAssets.type === 'pet';
 
   let peopleToNotShow = $derived(selectedPerson ? [personAssets, selectedPerson] : [personAssets]);
 
@@ -44,8 +46,12 @@
   }));
 
   onMount(async () => {
-    const data = await getAllPeople({ withHidden: false });
-    people = data.people;
+    const data = await getAllPeople({ withHidden: false, ...(isPet && { type: 'pet' as const }) });
+    const sourceSpecies = personAssets.species?.toLowerCase();
+    people =
+      isPet && sourceSpecies
+        ? data.people.filter((person) => person.species?.toLowerCase() === sourceSpecies)
+        : data.people;
   });
 
   const handleSelectedPerson = (person: PersonResponseDto) => {
@@ -67,9 +73,15 @@
 
     try {
       disableButtons = true;
-      const data = await createPerson({ personCreateDto: {} });
+      const data = await createPerson({
+        personCreateDto: isPet ? { type: PersonEntityType.Pet, species: personAssets.species } : {},
+      });
       await reassignFaces({ id: data.id, assetFaceUpdateDto: { data: selectedPeople } });
-      toastManager.primary($t('reassigned_assets_to_new_person', { values: { count: assetIds.length } }));
+      toastManager.primary(
+        $t(isPet ? 'reassigned_assets_to_new_pet' : 'reassigned_assets_to_new_person', {
+          values: { count: assetIds.length },
+        }),
+      );
     } catch (error) {
       handleError(error, $t('errors.unable_to_reassign_assets_new_person'));
     } finally {
@@ -110,14 +122,14 @@
   <Button
     class="min-w-0 grow sm:grow-0"
     shape="round"
-    title={$t('create_new_person_hint')}
+    title={$t(isPet ? 'create_new_pet_hint' : 'create_new_person_hint')}
     leadingIcon={mdiPlus}
     loading={showLoadingSpinnerCreate}
     size="small"
     disabled={disableButtons || hasSelection}
     onclick={handleCreate}
   >
-    <span class="truncate">{$t('create_new_person')}</span>
+    <span class="truncate">{$t(isPet ? 'create_new_pet' : 'create_new_person')}</span>
   </Button>
   <Button
     class="min-w-0 grow sm:grow-0"
@@ -153,7 +165,9 @@
          but for the close button — name the screen there instead. This is the bar's content slot
          rather than its header, because only the content slot shrinks (so `truncate` bites on a
          locale whose title is longer than the bar). -->
-    <p class="min-w-0 truncate text-sm font-medium text-dark sm:hidden">{$t('fix_incorrect_match')}</p>
+    <p class="min-w-0 truncate text-sm font-medium text-dark sm:hidden">
+      {$t(isPet ? 'move_to_another_pet' : 'fix_incorrect_match')}
+    </p>
   </ControlAppBar>
   {@render merge?.()}
   <section class="flex min-h-0 flex-1 flex-col px-4 pt-20 pb-4 md:px-17.5 md:pt-25 md:pb-6">

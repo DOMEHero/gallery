@@ -71,6 +71,14 @@ const setup = (db?: Kysely<DB>) => {
   ctx.getMock(JobRepository).queue.mockResolvedValue();
   ctx.getMock(JobRepository).queueAll.mockResolvedValue();
   ctx.getMock(JobRepository).empty.mockResolvedValue();
+  ctx.getMock(JobRepository).getJobCounts.mockResolvedValue({
+    active: 1,
+    waiting: 0,
+    delayed: 0,
+    paused: 0,
+    completed: 0,
+    failed: 0,
+  });
   return { sut, ctx };
 };
 
@@ -112,14 +120,14 @@ describe('PetRecognitionService.handlePetRecognition (medium)', () => {
     const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceA.id, embedding: axisEmbedding('first') })
+      .values({ faceId: faceA.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceB.id, embedding: nearAxisEmbedding('first', 2) })
+      .values({ faceId: faceB.id, embedding: nearAxisEmbedding('first', 2), species: 'dog' })
       .execute();
 
     expect(await sut.handlePetRecognition({ id: faceA.id, deferred: false, label: 'dog' })).toBe(JobStatus.Success);
@@ -163,14 +171,14 @@ describe('PetRecognitionService.handlePetRecognition (medium)', () => {
     const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceA.id, embedding: axisEmbedding('first') })
+      .values({ faceId: faceA.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceB.id, embedding: axisEmbedding('second') })
+      .values({ faceId: faceB.id, embedding: axisEmbedding('second'), species: 'cat' })
       .execute();
 
     expect(await sut.handlePetRecognition({ id: faceA.id, deferred: false, label: 'dog' })).toBe(JobStatus.Success);
@@ -208,14 +216,14 @@ describe('PetRecognitionService.handlePetRecognition (medium)', () => {
     const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceA.id, embedding: axisEmbedding('first') })
+      .values({ faceId: faceA.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     const { asset: assetB } = await ctx.newAsset({ ownerId: ownerB.id });
     const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: faceB.id, embedding: axisEmbedding('first') })
+      .values({ faceId: faceB.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     expect(await sut.handlePetRecognition({ id: faceA.id, deferred: false, label: 'dog' })).toBe(JobStatus.Success);
@@ -256,7 +264,7 @@ describe('PersonRepository.deleteAllPets (medium)', () => {
     const { assetFace: unassignedFace } = await ctx.newAssetFace({ assetId: asset.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: unassignedFace.id, embedding: axisEmbedding('first') })
+      .values({ faceId: unassignedFace.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     await personRepository.deleteAllPets();
@@ -289,7 +297,7 @@ describe('PersonRepository.deleteAllPets (medium)', () => {
     });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: petFace.id, embedding: axisEmbedding('first') })
+      .values({ faceId: petFace.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     await personRepository.deleteAllPets();
@@ -365,7 +373,7 @@ describe('PetRecognitionService.handleQueuePetRecognition (medium)', () => {
     });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: assignedPetFace.id, embedding: axisEmbedding('first') })
+      .values({ faceId: assignedPetFace.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     // … and an unassigned one, reachable only through pet_search.
@@ -373,7 +381,7 @@ describe('PetRecognitionService.handleQueuePetRecognition (medium)', () => {
     const { assetFace: unassignedPetFace } = await ctx.newAssetFace({ assetId: unassignedAsset.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: unassignedPetFace.id, embedding: nearAxisEmbedding('first', 2) })
+      .values({ faceId: unassignedPetFace.id, embedding: nearAxisEmbedding('first', 2), species: 'dog' })
       .execute();
 
     // Human faces: one assigned, one unassigned — both must survive.
@@ -422,7 +430,7 @@ describe('PetRecognitionService.handleQueuePetRecognition (medium)', () => {
       });
       await ctx.database
         .insertInto('pet_search')
-        .values({ faceId: petFace.id, embedding: axisEmbedding('first') })
+        .values({ faceId: petFace.id, embedding: axisEmbedding('first'), species: 'dog' })
         .execute();
       const spacePet = await ctx.database
         .insertInto('shared_space_person')
@@ -534,7 +542,7 @@ describe('PetRecognitionService.handleQueuePetRecognition (medium)', () => {
     });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: petFace.id, embedding: axisEmbedding('first') })
+      .values({ faceId: petFace.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
 
     expect(await sut.handleQueuePetRecognition({ force: true })).toBe(JobStatus.Success);
@@ -566,7 +574,7 @@ describe('PetRecognitionService.handleQueuePetRecognition (medium)', () => {
     const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: face.id, embedding: axisEmbedding('second') })
+      .values({ faceId: face.id, embedding: axisEmbedding('second'), species: 'dog' })
       .execute();
 
     // deferred: true so the run reaches the final resolution rather than requeueing itself.
@@ -606,13 +614,13 @@ describe('PetRecognitionService model switch (medium)', () => {
       const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id });
       await ctx.database
         .insertInto('pet_search')
-        .values({ faceId: faceA.id, embedding: axisEmbedding('first') })
+        .values({ faceId: faceA.id, embedding: axisEmbedding('first'), species: 'dog' })
         .execute();
       const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id });
       await ctx.database
         .insertInto('pet_search')
-        .values({ faceId: faceB.id, embedding: nearAxisEmbedding('first', 2) })
+        .values({ faceId: faceB.id, embedding: nearAxisEmbedding('first', 2), species: 'dog' })
         .execute();
 
       expect(await sut.handlePetRecognition({ id: faceA.id, deferred: false, label: 'dog' })).toBe(JobStatus.Success);
@@ -715,7 +723,7 @@ describe('PetRecognitionService model switch — shared-space copies (medium)', 
     const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id });
     await ctx.database
       .insertInto('pet_search')
-      .values({ faceId: face.id, embedding: axisEmbedding('first') })
+      .values({ faceId: face.id, embedding: axisEmbedding('first'), species: 'dog' })
       .execute();
     expect(await sut.handlePetRecognition({ id: face.id, deferred: false, label: 'dog' })).toBe(JobStatus.Success);
 

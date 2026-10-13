@@ -86,6 +86,12 @@ export class FaceAssignmentService {
       faceIds,
       trx,
     );
+    // Pet recognition's automatic path does not use FaceAssignmentService. Therefore every pet
+    // row recorded here was placed by a person through an explicit reassignment or confirmation,
+    // never by a prior model prediction.
+    if (strength === 'manual') {
+      await this.deps.personRepository.markPetFacesTrusted({ personGroupId, faceIds }, trx);
+    }
     return faceIds;
   }
 

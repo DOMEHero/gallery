@@ -51,6 +51,11 @@ Recognized pets appear on the **People** page with a paw badge, exactly like rec
 - Hide a pet you don't want on the People page.
 - Open a pet to browse every photo it appears in.
 
+If two similar pets were grouped together, open that pet, select the photos that belong to the other
+animal, then choose **Move to another pet** from the overflow menu. Pick an existing pet of the same
+species or **Create new pet**. This manual correction becomes a trusted reference for matching future
+photos.
+
 Pets propagate into shared spaces the same way people do, so a space's People page shows the pets in that space's photos.
 
 ## Model options
@@ -86,6 +91,26 @@ How far apart two pets can be in embedding space and still be treated as the sam
 
 Changing this affects future recognition jobs; existing assignments stay as they are until you reset.
 
+### Confirmed-pet matching
+
+When **Match confirmed pets** is enabled, Gallery keeps a small trust record for detections that a
+person explicitly assigned, confirmed, named, or merged. Ordinary automatic assignments are never
+added to that record. A new dog or cat is compared only with trusted references of the same species;
+each named pet is scored by the mean distance of its closest `referenceTopK` examples (default `3`).
+This preserves different appearances such as front/side views without letting one accidental nearest
+neighbour define an identity.
+
+Gallery accepts a known identity only when its distance is below **Maximum recognition distance** and
+it leads the runner-up by **Identity ambiguity margin** (default `0.05`). If either condition fails,
+the detection remains in the existing unknown-pet clustering path instead of being forced onto a
+known pet. This intentionally favours an unknown/review result over merging two similar animals.
+
+The global matcher currently uses the stored DINOv2 embeddings and PostgreSQL cosine distance only.
+The code exposes a bounded five-identity shortlist for a future local-feature reranker, but no
+ALIKED/LightGlue/WildFusion model or crop-descriptor cache is enabled yet: adding one safely requires
+an explicit model/license choice and a persistent crop-feature cache. No existing embeddings are
+recomputed when a reference is added or moved.
+
 ### Minimum recognized faces
 
 How many similar pet detections must exist before Gallery creates a named-able individual, from 1 to 1000. Default `1`.
@@ -100,9 +125,31 @@ See [Model options](#model-options) above. Changing this deletes and rebuilds ev
 
 1. **Detection.** The pet detector finds animals and their bounding boxes (see [Pet Detection](/features/pet-detection)).
 2. **Embedding.** For dogs and cats, the same machine learning request crops the animal, resizes it to 224x224, and runs it through a frozen DINOv2 backbone plus a trained linear projection, producing a 512-dimension L2-normalized embedding. These are stored in a dedicated `pet_search` table, entirely separate from human face embeddings.
-3. **Clustering.** A `PetRecognition` job runs a nearest-neighbour search over that table, scoped to the owner. A match within the recognition distance joins the existing individual; otherwise a new one is created.
+3. **Matching and clustering.** A `PetRecognition` job first scores all trusted references of the
+   query species, using per-pet top-k cosine distances plus an absolute threshold and runner-up
+   margin. Rejected detections then use the original nearest-neighbour clustering search over
+   `pet_search`; otherwise a new individual is created.
 4. **Shared spaces.** The pet is projected into every space its photo belongs to, the same path human faces already take.
 
 Human and pet embeddings never mix: they live in different tables, are searched by different queries and are queued on different job queues, so a pet can never be clustered onto a person or vice versa.
 
 Recognition also runs nightly, picking up any pet detections that have not yet been assigned to an individual.
+
+## Developer evaluation
+
+The pure matcher/evaluation helpers live in `server/src/utils/pet-recognition-matcher.ts`. They accept
+JSON-friendly embeddings, hold a labelled query out of its own reference pool, report false matches,
+false rejects, per-pet recall and a confusion matrix, and can sweep distance/margin combinations with
+`evaluatePetRecognitionGrid`. `buildPetRecognitionCalibrationPairs` creates a bounded calibration set
+with nearest same-species hard negatives; it never creates cat–dog negatives. Run the focused tests with:
+
+```bash
+mise exec -- pnpm --dir server exec vitest --config test/vitest.config.mjs --run \
+  src/utils/pet-recognition-matcher.spec.ts
+```
+
+Export trusted references and held-out detections from a development database to call the helpers for
+your library before changing thresholds. The current clustering implementation is the baseline; the
+top-k matcher and top-k-plus-rejection variants are the supported comparisons. Local-feature fusion,
+calibration fitting, and a full A/B command remain intentionally deferred until a compatible local
+matcher is selected.

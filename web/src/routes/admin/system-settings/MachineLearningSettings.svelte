@@ -484,6 +484,15 @@
 
           <hr />
 
+          <SettingSwitch
+            title={$t('admin.machine_learning_pet_recognition_known_pet_matching')}
+            subtitle={$t('admin.machine_learning_pet_recognition_known_pet_matching_description')}
+            bind:checked={configToEdit.machineLearning.petRecognition.knownPetMatchingEnabled}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+          />
+
           <SettingSelect
             label={$t('admin.machine_learning_pet_recognition_model')}
             desc={$t('admin.machine_learning_pet_recognition_model_description')}
@@ -514,6 +523,38 @@
               !configToEdit.machineLearning.petRecognition.enabled}
             isEdited={configToEdit.machineLearning.petRecognition.maxDistance !==
               config.machineLearning.petRecognition.maxDistance}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_recognition_identity_margin')}
+            description={$t('admin.machine_learning_pet_recognition_identity_margin_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.identityMargin}
+            step="0.01"
+            min={0}
+            max={2}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled ||
+              !configToEdit.machineLearning.petRecognition.knownPetMatchingEnabled}
+            isEdited={configToEdit.machineLearning.petRecognition.identityMargin !==
+              config.machineLearning.petRecognition.identityMargin}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_recognition_reference_top_k')}
+            description={$t('admin.machine_learning_pet_recognition_reference_top_k_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.referenceTopK}
+            step="1"
+            min={1}
+            max={10}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled ||
+              !configToEdit.machineLearning.petRecognition.knownPetMatchingEnabled}
+            isEdited={configToEdit.machineLearning.petRecognition.referenceTopK !==
+              config.machineLearning.petRecognition.referenceTopK}
           />
 
           <SettingInputField

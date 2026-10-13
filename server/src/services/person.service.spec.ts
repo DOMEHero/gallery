@@ -1429,6 +1429,19 @@ describe(PersonService.name, () => {
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.personGroupId]));
     });
 
+    it('promotes a named pet’s existing embeddings to trusted references', async () => {
+      const auth = AuthFactory.create();
+      const pet = PersonFactory.create({ name: 'Mimi', type: 'pet' });
+
+      mocks.person.getByGroupIdOnly.mockResolvedValue(pet);
+      mocks.person.update.mockResolvedValue(pet);
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([pet.personGroupId]));
+
+      await sut.update(auth, pet.personGroupId, { name: 'Mimi' });
+
+      expect(mocks.person.markPetFacesTrusted).toHaveBeenCalledWith({ personGroupId: pet.personGroupId });
+    });
+
     it('should queue scoped space metadata backfill when an identity-backed person name changes', async () => {
       const auth = AuthFactory.create();
       const person = PersonFactory.create({ name: 'Aurelia', identityId: 'identity-1' });
@@ -2205,6 +2218,25 @@ describe(PersonService.name, () => {
 
       expect(mocks.person.createGroup).toHaveBeenCalledWith(auth.user.id);
       expect(mocks.person.create).toHaveBeenCalledWith({ ownerId: auth.user.id, personGroupId: group.id });
+    });
+
+    it('should create a pet in a new group with its species', async () => {
+      const auth = AuthFactory.create();
+      const group = PersonGroupFactory.create();
+
+      mocks.person.createGroup.mockResolvedValue(group);
+      mocks.person.create.mockResolvedValue(
+        PersonFactory.create({ personGroupId: group.id, type: 'pet', species: 'cat' }),
+      );
+
+      await expect(sut.create(auth, { type: 'pet', species: 'cat' })).resolves.toBeDefined();
+
+      expect(mocks.person.create).toHaveBeenCalledWith({
+        ownerId: auth.user.id,
+        personGroupId: group.id,
+        type: 'pet',
+        species: 'cat',
+      });
     });
   });
 

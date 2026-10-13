@@ -28147,8 +28147,19 @@
             "description": "Whether the task is enabled",
             "type": "boolean"
           },
+          "identityMargin": {
+            "description": "Minimum cosine-distance lead over the runner-up pet identity",
+            "format": "double",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          },
+          "knownPetMatchingEnabled": {
+            "description": "Whether confirmed-pet matching is enabled",
+            "type": "boolean"
+          },
           "maxDistance": {
-            "description": "Maximum distance threshold for pet recognition",
+            "description": "Maximum cosine distance for an automatic pet match",
             "format": "double",
             "maximum": 2,
             "minimum": 0.1,
@@ -28164,13 +28175,22 @@
             "description": "Name of the model to use",
             "minLength": 1,
             "type": "string"
+          },
+          "referenceTopK": {
+            "description": "Number of closest confirmed pet references to average for each identity",
+            "maximum": 10,
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [
           "enabled",
+          "identityMargin",
+          "knownPetMatchingEnabled",
           "maxDistance",
           "minFaces",
-          "modelName"
+          "modelName",
+          "referenceTopK"
         ],
         "type": "object"
       },
@@ -35852,6 +35872,16 @@
           "name": {
             "description": "Person name",
             "type": "string"
+          },
+          "species": {
+            "description": "Pet species (e.g. dog, cat)",
+            "minLength": 1,
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PersonEntityType",
+            "description": "Entity type (person or pet)"
           }
         },
         "type": "object"
@@ -35875,6 +35905,13 @@
           }
         ],
         "x-immich-state": "Stable"
+      },
+      "PersonEntityType": {
+        "enum": [
+          "person",
+          "pet"
+        ],
+        "type": "string"
       },
       "PersonFacePageResponseDto": {
         "properties": {

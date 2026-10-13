@@ -78,6 +78,14 @@ export interface UpdateFacesData {
   newPersonGroupId: string;
 }
 
+export interface TrustedPetReference {
+  embedding: string;
+  faceId: string;
+  name: string;
+  personGroupId: string;
+  species?: string | null;
+}
+
 export interface PersonStatistics {
   assets: number;
   faces: number;
@@ -1183,6 +1191,96 @@ export class PersonRepository {
       .where('asset_face.id', '=', id)
       .where('asset_face.deletedAt', 'is', null)
       .executeTakeFirst();
+  }
+
+  /**
+   * Marks existing pet embeddings as user-confirmed references. The vector itself stays in
+   * `pet_search`; this relation is intentionally only the trust decision, so an automatic
+   * assignment can never make itself a future supervised training example.
+   */
+  async markPetFacesTrusted(
+    { personGroupId, faceIds }: { personGroupId: string; faceIds?: string[] },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
+    const trustedFaces = db
+      .selectFrom('asset_face')
+      .innerJoin('person', 'person.personGroupId', 'asset_face.personGroupId')
+      .innerJoin('pet_search', 'pet_search.faceId', 'asset_face.id')
+      .select('asset_face.id as faceId')
+      .where('asset_face.personGroupId', '=', personGroupId)
+      .where('person.type', '=', 'pet')
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .$if(faceIds !== undefined, (qb) => qb.where('asset_face.id', 'in', faceIds!));
+
+    await db
+      .insertInto('pet_recognition_reference')
+      .columns(['faceId'])
+      .expression(trustedFaces)
+      .onConflict((oc) => oc.column('faceId').doNothing())
+      .execute();
+  }
+
+  /**
+   * A cheap per-owner/species cache marker. The count catches removals; the latest creation or
+   * assignment timestamp catches new confirmations and manual moves of an already trusted face.
+   */
+  async getTrustedPetReferenceVersion({ ownerId, species }: { ownerId: string; species: string }): Promise<string> {
+    const result = await this.db
+      .selectFrom('pet_recognition_reference')
+      .innerJoin('asset_face', 'asset_face.id', 'pet_recognition_reference.faceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('person', 'person.personGroupId', 'asset_face.personGroupId')
+      .select((eb) => [
+        eb.fn.countAll<number>().as('count'),
+        sql<Date | null>`max(greatest("asset_face"."updatedAt", "pet_recognition_reference"."createdAt"))`.as(
+          'lastChangedAt',
+        ),
+      ])
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .where('person.ownerId', '=', ownerId)
+      .where('person.type', '=', 'pet')
+      .where('person.species', '=', species)
+      .executeTakeFirstOrThrow();
+
+    return `${result.count}:${result.lastChangedAt?.toISOString() ?? ''}`;
+  }
+
+  /**
+   * Fetches every trusted reference for the relevant owner and species in one query. The caller
+   * caches the result by `getTrustedPetReferenceVersion`, avoiding a scan for each candidate pet.
+   */
+  async getTrustedPetReferences({
+    ownerId,
+    species,
+  }: {
+    ownerId: string;
+    species: string;
+  }): Promise<TrustedPetReference[]> {
+    return this.db
+      .selectFrom('pet_recognition_reference')
+      .innerJoin('asset_face', 'asset_face.id', 'pet_recognition_reference.faceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('person', 'person.personGroupId', 'asset_face.personGroupId')
+      .innerJoin('pet_search', 'pet_search.faceId', 'asset_face.id')
+      .select([
+        'asset_face.id as faceId',
+        'person.personGroupId',
+        'person.name',
+        'person.species',
+        'pet_search.embedding',
+      ])
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .where('person.ownerId', '=', ownerId)
+      .where('person.type', '=', 'pet')
+      .where('person.species', '=', species)
+      .execute();
   }
 
   @GenerateSql({ params: [{ ownerId: DummyValue.UUID, personGroupId: DummyValue.UUID }] })

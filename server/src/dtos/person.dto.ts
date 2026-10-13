@@ -15,23 +15,40 @@ import { hasSomeDefined } from 'src/utils/misc.js';
 import { transformFaceBoundingBox } from 'src/utils/transform.js';
 import { hexColor, stringToBool, uniqueIds } from 'src/validation.js';
 
-const PersonCreateSchema = z
-  .object({
-    name: z.string().optional().describe('Person name'),
-    birthDate: z
-      .string()
-      .meta({ format: 'date' })
-      .nullable()
-      .optional()
-      .refine((val) => (val ? new Date(val) <= new Date() : true), { error: 'Birth date cannot be in the future' })
-      .describe('Person date of birth'),
-    isHidden: z.boolean().optional().describe('Person visibility (hidden)'),
-    isFavorite: z.boolean().optional().describe('Mark as favorite'),
-    color: hexColor.nullable().optional().describe('Person color (hex)'),
+const PersonEditableSchema = z.object({
+  name: z.string().optional().describe('Person name'),
+  birthDate: z
+    .string()
+    .meta({ format: 'date' })
+    .nullable()
+    .optional()
+    .refine((val) => (val ? new Date(val) <= new Date() : true), { error: 'Birth date cannot be in the future' })
+    .describe('Person date of birth'),
+  isHidden: z.boolean().optional().describe('Person visibility (hidden)'),
+  isFavorite: z.boolean().optional().describe('Mark as favorite'),
+  color: hexColor.nullable().optional().describe('Person color (hex)'),
+});
+
+const PersonEntityTypeSchema = z.enum(['person', 'pet']).meta({ id: 'PersonEntityType' });
+
+const PersonCreateSchema = PersonEditableSchema.extend({
+  // Keep this enum named. An anonymous OpenAPI enum joins oazapfts's Type/Type2 pool and renumbers
+  // unrelated generated enums imported by the web app (see face-repair.dto.ts).
+  type: PersonEntityTypeSchema.optional().describe('Entity type (person or pet)'),
+  species: z.string().min(1).nullable().optional().describe('Pet species (e.g. dog, cat)'),
+})
+  .superRefine((dto, ctx) => {
+    if (dto.type !== 'pet' && dto.species != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['species'],
+        message: 'species is only valid when type is pet',
+      });
+    }
   })
   .meta({ id: 'PersonCreateDto' });
 
-const PersonUpdateBaseSchema = PersonCreateSchema.extend({
+const PersonUpdateBaseSchema = PersonEditableSchema.extend({
   featureFaceAssetId: z.uuidv4().optional().describe('Asset ID used for feature face thumbnail'),
 });
 

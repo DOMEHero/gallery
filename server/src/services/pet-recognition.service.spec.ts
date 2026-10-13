@@ -32,6 +32,21 @@ const enabledConfig = {
   },
 };
 
+const knownPetMatchingConfig = {
+  machineLearning: {
+    enabled: true,
+    petRecognition: {
+      enabled: true,
+      knownPetMatchingEnabled: true,
+      modelName: 'pet-recognition-base',
+      maxDistance: 0.55,
+      identityMargin: 0.05,
+      referenceTopK: 3,
+      minFaces: 1,
+    },
+  },
+};
+
 // Full config shape (petDetection + petRecognition) for the model-switch hook tests: onConfigInit /
 // onConfigUpdate receive the event payload directly (not via getConfig), so unlike enabledConfig
 // above these must not rely on the defaults merge to fill in petDetection.
@@ -726,6 +741,120 @@ describe(PetRecognitionService.name, () => {
         expect(await sut.handlePetRecognition({ id: 'face-id', label: 'dog' })).toEqual(JobStatus.Success);
 
         expect(mocks.person.createWithGroup).toHaveBeenCalledWith(expect.objectContaining({ species: 'dog' }));
+      });
+
+      it('uses top-k confirmed examples for a same-species known pet before unknown clustering', async () => {
+        mocks.systemMetadata.get.mockResolvedValue(knownPetMatchingConfig);
+        mocks.person.getPetFaceForRecognition.mockResolvedValue(
+          makePetFace({ petSearch: { faceId: 'face-id', embedding: '[1,0]', species: 'cat' } }),
+        );
+        mocks.person.getTrustedPetReferenceVersion.mockResolvedValue('2:confirmed');
+        mocks.person.getTrustedPetReferences.mockResolvedValue([
+          { faceId: 'mimi-1', personGroupId: 'mimi', name: 'Mimi', embedding: '[1,0]' },
+          { faceId: 'mimi-2', personGroupId: 'mimi', name: 'Mimi', embedding: '[0.98,0.2]' },
+          { faceId: 'tabby-1', personGroupId: 'tabby', name: 'Tabby', embedding: '[0,1]' },
+        ]);
+        mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'mimi-identity' } as any);
+        mocks.person.getByGroupIdOnly.mockResolvedValue(makePerson({ personGroupId: 'mimi', faceAssetId: 'mimi-1' }));
+        mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([]);
+
+        expect(await sut.handlePetRecognition({ id: 'face-id' })).toEqual(JobStatus.Success);
+
+        expect(mocks.person.getTrustedPetReferences).toHaveBeenCalledWith({ ownerId: 'owner-id', species: 'cat' });
+        expect(mocks.search.searchPets).not.toHaveBeenCalled();
+        expect(mocks.person.reassignFaces).toHaveBeenCalledWith({ faceIds: ['face-id'], newPersonGroupId: 'mimi' });
+        // An automatic success is intentionally not promoted into the trusted reference set.
+        expect(mocks.person.markPetFacesTrusted).not.toHaveBeenCalled();
+      });
+
+      it('rejects an ambiguous confirmed-pet result and continues through the unknown-clustering path', async () => {
+        mocks.systemMetadata.get.mockResolvedValue(knownPetMatchingConfig);
+        mocks.person.getPetFaceForRecognition.mockResolvedValue(
+          makePetFace({ petSearch: { faceId: 'face-id', embedding: '[1,0]', species: 'cat' } }),
+        );
+        mocks.person.getTrustedPetReferenceVersion.mockResolvedValue('2:confirmed');
+        mocks.person.getTrustedPetReferences.mockResolvedValue([
+          { faceId: 'mimi-1', personGroupId: 'mimi', name: 'Mimi', embedding: '[1,0]' },
+          { faceId: 'tabby-1', personGroupId: 'tabby', name: 'Tabby', embedding: '[0.999,0.045]' },
+        ]);
+        mocks.search.searchPets
+          .mockResolvedValueOnce([{ id: 'face-id', personGroupId: null, distance: 0 }])
+          .mockResolvedValueOnce([]);
+        mocks.person.createWithGroup.mockResolvedValue(makePerson({ personGroupId: 'new-pet' }));
+        mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'new-pet-identity' } as any);
+        mocks.person.getByGroupIdOnly.mockResolvedValue(
+          makePerson({ personGroupId: 'new-pet', faceAssetId: 'face-id' }),
+        );
+        mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([]);
+
+        expect(await sut.handlePetRecognition({ id: 'face-id' })).toEqual(JobStatus.Success);
+
+        expect(mocks.search.searchPets).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ species: 'cat', excludeTrustedPersons: true }),
+        );
+        expect(mocks.person.createWithGroup).toHaveBeenCalledWith(expect.objectContaining({ species: 'cat' }));
+      });
+
+      it('refreshes the reference cache after a manual correction changes its version', async () => {
+        mocks.systemMetadata.get.mockResolvedValue(knownPetMatchingConfig);
+        mocks.person.getPetFaceForRecognition
+          .mockResolvedValueOnce(
+            makePetFace({ id: 'face-1', petSearch: { faceId: 'face-1', embedding: '[1,0]', species: 'cat' } }),
+          )
+          .mockResolvedValueOnce(
+            makePetFace({ id: 'face-2', petSearch: { faceId: 'face-2', embedding: '[0,1]', species: 'cat' } }),
+          );
+        mocks.person.getTrustedPetReferenceVersion.mockResolvedValueOnce('1:before').mockResolvedValueOnce('2:after');
+        mocks.person.getTrustedPetReferences
+          .mockResolvedValueOnce([{ faceId: 'mimi-1', personGroupId: 'mimi', name: 'Mimi', embedding: '[1,0]' }])
+          .mockResolvedValueOnce([{ faceId: 'tabby-1', personGroupId: 'tabby', name: 'Tabby', embedding: '[0,1]' }]);
+        mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identity' } as any);
+        mocks.person.getByGroupIdOnly.mockResolvedValue(makePerson({ faceAssetId: 'existing-face' }));
+        mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([]);
+
+        await sut.handlePetRecognition({ id: 'face-1' });
+        await sut.handlePetRecognition({ id: 'face-2' });
+
+        expect(mocks.person.getTrustedPetReferences).toHaveBeenCalledTimes(2);
+        expect(mocks.person.reassignFaces).toHaveBeenNthCalledWith(1, {
+          faceIds: ['face-1'],
+          newPersonGroupId: 'mimi',
+        });
+        expect(mocks.person.reassignFaces).toHaveBeenNthCalledWith(2, {
+          faceIds: ['face-2'],
+          newPersonGroupId: 'tabby',
+        });
+      });
+
+      it('keeps the original clustering behavior when confirmed-pet matching is disabled', async () => {
+        mocks.systemMetadata.get.mockResolvedValue({
+          machineLearning: {
+            enabled: true,
+            petRecognition: {
+              ...knownPetMatchingConfig.machineLearning.petRecognition,
+              knownPetMatchingEnabled: false,
+            },
+          },
+        });
+        mocks.person.getPetFaceForRecognition.mockResolvedValue(
+          makePetFace({ petSearch: { faceId: 'face-id', embedding: '[1,0]', species: 'cat' } }),
+        );
+        mocks.search.searchPets.mockResolvedValue([{ id: 'face-id', personGroupId: 'cluster-pet', distance: 0 }]);
+        mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'cluster-identity' } as any);
+        mocks.person.getByGroupIdOnly.mockResolvedValue(
+          makePerson({ personGroupId: 'cluster-pet', faceAssetId: 'face-id' }),
+        );
+        mocks.sharedSpace.getSpaceIdsForAsset.mockResolvedValue([]);
+
+        expect(await sut.handlePetRecognition({ id: 'face-id' })).toEqual(JobStatus.Success);
+
+        expect(mocks.person.getTrustedPetReferences).not.toHaveBeenCalled();
+        expect(mocks.search.searchPets).toHaveBeenCalledWith(expect.objectContaining({ species: 'cat' }));
+        expect(mocks.person.reassignFaces).toHaveBeenCalledWith({
+          faceIds: ['face-id'],
+          newPersonGroupId: 'cluster-pet',
+        });
       });
 
       it('assigns to a person already matched by search without creating a new person (5.6)', async () => {

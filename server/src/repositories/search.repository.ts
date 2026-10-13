@@ -326,9 +326,13 @@ export interface FaceSearchResult {
 // Pet equivalent of FaceEmbeddingSearch, scoped to pet_search instead of face_search. Deliberately
 // drops `minBirthDate` — a person's birthdate has no pet analogue, so the filter is meaningless here.
 export interface PetEmbeddingSearch extends SearchEmbeddingOptions {
+  /** Excludes identities with at least one user-confirmed pet reference. */
+  excludeTrustedPersons?: boolean;
   hasPerson?: boolean;
   numResults: number;
   maxDistance: number;
+  /** Individual pet recognition is species-scoped; omitted only for legacy rows with no label. */
+  species?: string;
   /**
    * Required here, unlike the optional base: pet recognition has no album- or space-scoped caller,
    * so every `searchPets` scan is owner-scoped and the `asset.ownerId` predicate below is
@@ -1300,7 +1304,15 @@ export class SearchRepository {
       },
     ],
   })
-  searchPets({ userIds, embedding, numResults, maxDistance, hasPerson }: PetEmbeddingSearch) {
+  searchPets({
+    userIds,
+    embedding,
+    numResults,
+    maxDistance,
+    hasPerson,
+    species,
+    excludeTrustedPersons,
+  }: PetEmbeddingSearch) {
     if (!z.int().min(1).max(1000).safeParse(numResults).success) {
       throw new Error(`Invalid value for 'numResults': ${numResults}`);
     }
@@ -1320,7 +1332,23 @@ export class SearchRepository {
             .innerJoin('pet_search', 'pet_search.faceId', 'asset_face.id')
             .where('asset.ownerId', '=', anyUuid(userIds))
             .where('asset.deletedAt', 'is', null)
-            .$if(!!hasPerson, (qb) => qb.where('asset_face.personGroupId', 'is not', null))
+            .$if(hasPerson !== undefined, (qb) =>
+              qb.where('asset_face.personGroupId', hasPerson ? 'is not' : 'is', null),
+            )
+            .$if(species !== undefined, (qb) => qb.where('pet_search.species', '=', species!))
+            .$if(!!excludeTrustedPersons, (qb) =>
+              qb.where((eb) =>
+                eb.not(
+                  eb.exists(
+                    eb
+                      .selectFrom('pet_recognition_reference')
+                      .innerJoin('asset_face as trusted_face', 'trusted_face.id', 'pet_recognition_reference.faceId')
+                      .select(sql`1`.as('one'))
+                      .whereRef('trusted_face.personGroupId', '=', 'asset_face.personGroupId'),
+                  ),
+                ),
+              ),
+            )
             .orderBy('distance')
             .limit(numResults),
         )

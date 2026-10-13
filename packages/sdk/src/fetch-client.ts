@@ -283,12 +283,18 @@ export type AdminConfigPetDetectionDto = {
 export type AdminConfigPetRecognitionDto = {
     /** Whether the task is enabled */
     enabled: boolean;
-    /** Maximum distance threshold for pet recognition */
+    /** Minimum cosine-distance lead over the runner-up pet identity */
+    identityMargin: number;
+    /** Whether confirmed-pet matching is enabled */
+    knownPetMatchingEnabled: boolean;
+    /** Maximum cosine distance for an automatic pet match */
     maxDistance: number;
     /** Minimum number of faces required for recognition */
     minFaces: number;
     /** Name of the model to use */
     modelName: string;
+    /** Number of closest confirmed pet references to average for each identity */
+    referenceTopK: number;
 };
 export type AdminConfigMachineLearningDto = {
     availabilityChecks: AdminConfigMachineLearningAvailabilityChecksDto;
@@ -2462,6 +2468,10 @@ export type PersonCreateDto = {
     isHidden?: boolean;
     /** Person name */
     name?: string;
+    /** Pet species (e.g. dog, cat) */
+    species?: string | null;
+    /** Entity type (person or pet) */
+    "type"?: PersonEntityType;
 };
 export type PeopleUpdateItem = {
     /** Person date of birth */
@@ -11669,6 +11679,10 @@ export enum MemoryType {
 export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
+}
+export enum PersonEntityType {
+    Person = "person",
+    Pet = "pet"
 }
 export enum Type2 {
     Person = "person",

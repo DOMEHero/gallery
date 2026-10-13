@@ -108,13 +108,25 @@ export const GalleryPetDetectionSchema = z
 export const GalleryPetRecognitionSchema = z
   .object({
     enabled: z.boolean().describe('Whether the task is enabled'),
+    knownPetMatchingEnabled: z.boolean().describe('Whether confirmed-pet matching is enabled'),
     modelName: z.string().min(1).describe('Name of the model to use'),
     maxDistance: z
       .number()
       .meta({ format: 'double' })
       .min(0.1)
       .max(2)
-      .describe('Maximum distance threshold for pet recognition'),
+      .describe('Maximum cosine distance for an automatic pet match'),
+    identityMargin: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .max(2)
+      .describe('Minimum cosine-distance lead over the runner-up pet identity'),
+    referenceTopK: z
+      .int()
+      .min(1)
+      .max(10)
+      .describe('Number of closest confirmed pet references to average for each identity'),
     // Upper bound mirrors SearchRepository.searchPets's own `numResults` guard (1..1000): minFaces
     // is passed straight through as the NN window size, so a larger value would make every
     // recognition job throw rather than being rejected at save time.
@@ -159,7 +171,15 @@ export const galleryMachineLearningDefaults = {
   clipMaxDistance: 0,
   faceSuggestions: { enabled: true, maxDistance: 0.7 },
   petDetection: { enabled: false, modelName: 'rfdetr-nano', minScore: 0.3 },
-  petRecognition: { enabled: false, modelName: 'pet-recognition-base', maxDistance: 0.55, minFaces: 1 },
+  petRecognition: {
+    enabled: false,
+    knownPetMatchingEnabled: true,
+    modelName: 'pet-recognition-base',
+    maxDistance: 0.55,
+    identityMargin: 0.05,
+    referenceTopK: 3,
+    minFaces: 1,
+  },
 };
 
 export const galleryServerDefaults = { mergePeopleAcrossOwners: false };

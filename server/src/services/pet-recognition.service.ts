@@ -1,15 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import type { ArgOf } from 'src/repositories/event.repository.js';
+import type { TrustedPetReference } from 'src/repositories/person.repository.js';
 import { JOBS_ASSET_PAGINATION_SIZE, PET_RECOGNITION_MODEL_NAMES } from 'src/constants.js';
 import { OnEvent, OnJob } from 'src/decorators.js';
 import { SystemConfig } from 'src/dtos/config.dto.js';
 import { DatabaseLock, ImmichWorker, JobName, JobStatus, QueueName, SystemMetadataKey, VectorIndex } from 'src/enum.js';
 import { BaseService } from 'src/services/base.service.js';
 import { JobItem, type JobOf } from 'src/types.js';
-import { isPetDetectionEnabled, isPetRecognitionEnabled } from 'src/utils/misc.js';
+import { isPetDetectionEnabled, isPetRecognitionEnabled, isRecognizablePetSpecies } from 'src/utils/misc.js';
+import { matchKnownPet, preparePetRecognitionReferences } from 'src/utils/pet-recognition-matcher.js';
+
+type CachedPetReferences = {
+  references: TrustedPetReference[];
+  version: string;
+};
 
 @Injectable()
 export class PetRecognitionService extends BaseService {
+  private trustedPetReferenceCache = new Map<string, CachedPetReferences>();
+
   @OnEvent({ name: 'ConfigValidate' })
   onConfigValidate({ newConfig }: ArgOf<'ConfigValidate'>) {
     const modelName = newConfig.machineLearning.petRecognition.modelName;
@@ -164,45 +173,80 @@ export class PetRecognitionService extends BaseService {
       return JobStatus.Skipped;
     }
 
-    const { maxDistance, minFaces } = machineLearning.petRecognition;
+    const { identityMargin, knownPetMatchingEnabled, maxDistance, minFaces, referenceTopK } =
+      machineLearning.petRecognition;
     const embedding = face.petSearch.embedding;
     const ownerId = face.asset.ownerId;
+    const species = (label ?? face.petSearch.species)?.toLowerCase();
+    let personId: string | undefined;
+    let isCore = true;
+    let rejectedKnownPetMatch = false;
 
-    const matches = await this.searchRepository.searchPets({
-      userIds: [ownerId],
-      embedding,
-      maxDistance,
-      numResults: Math.max(minFaces, 1),
-    });
-
-    this.logger.debug(`Pet face ${id} has ${matches.length} matches`);
-
-    let personId = matches.find((match) => match.personGroupId)?.personGroupId ?? undefined;
-    const isCore = matches.length >= minFaces;
-
-    if (!isCore && !deferred) {
-      this.logger.debug(`Deferring non-core pet face ${id} for later processing`);
-      await this.jobRepository.queue({
-        name: JobName.PetRecognition,
-        data: { id, deferred: true, ...(label !== undefined && { label }) },
+    if (
+      knownPetMatchingEnabled &&
+      species &&
+      isRecognizablePetSpecies(species) &&
+      identityMargin !== undefined &&
+      referenceTopK !== undefined
+    ) {
+      const knownMatch = await this.matchKnownPet({
+        embedding,
+        identityMargin,
+        maxDistance,
+        ownerId,
+        referenceTopK,
+        species,
       });
-      return JobStatus.Skipped;
+      personId = knownMatch.best?.personGroupId;
+      rejectedKnownPetMatch = knownMatch.decision !== 'matched';
+      if (rejectedKnownPetMatch) {
+        personId = undefined;
+      }
+      this.logKnownPetMatch(id, species, knownMatch, maxDistance);
     }
 
     if (!personId) {
-      // The core-window search above can be too narrow to surface an already-labelled match — at
-      // the shipped default (minFaces: 1, numResults: 1) the face's own row is always the closest
-      // result (distance 0 to itself), so it alone fills the window and a genuinely matching
-      // sibling face is never returned. Mirrors handleRecognizeFaces's second, hasPerson-scoped
-      // search (person.service.ts), which exists for exactly this reason.
-      const matchWithPerson = await this.searchRepository.searchPets({
+      const matches = await this.searchRepository.searchPets({
         userIds: [ownerId],
         embedding,
         maxDistance,
-        numResults: 1,
-        hasPerson: true,
+        numResults: Math.max(minFaces, 1),
+        ...(species !== undefined && { species }),
+        ...(rejectedKnownPetMatch && { excludeTrustedPersons: true }),
       });
-      personId = matchWithPerson[0]?.personGroupId ?? undefined;
+
+      this.logger.debug(`Pet face ${id} has ${matches.length} unknown-cluster matches`);
+
+      personId = matches.find((match) => match.personGroupId)?.personGroupId ?? undefined;
+      isCore = matches.length >= minFaces;
+
+      if (!isCore && !deferred) {
+        this.logger.debug(`Deferring non-core pet face ${id} for later processing`);
+        await this.jobRepository.queue({
+          name: JobName.PetRecognition,
+          data: { id, deferred: true, ...(label !== undefined && { label }) },
+        });
+        return JobStatus.Skipped;
+      }
+
+      if (!personId) {
+        // The core-window search above can be too narrow to surface an already-labelled match — at
+        // the shipped default (minFaces: 1, numResults: 1) the face's own row is always the closest
+        // result (distance 0 to itself), so it alone fills the window and a genuinely matching
+        // sibling face is never returned. Mirrors handleRecognizeFaces's second, hasPerson-scoped
+        // search (person.service.ts), which exists for exactly this reason. A rejected supervised
+        // match deliberately excludes confirmed pets here, so ambiguity cannot bypass its margin.
+        const matchWithPerson = await this.searchRepository.searchPets({
+          userIds: [ownerId],
+          embedding,
+          maxDistance,
+          numResults: 1,
+          hasPerson: true,
+          ...(species !== undefined && { species }),
+          ...(rejectedKnownPetMatch && { excludeTrustedPersons: true }),
+        });
+        personId = matchWithPerson[0]?.personGroupId ?? undefined;
+      }
     }
 
     if (!personId && isCore) {
@@ -354,5 +398,61 @@ export class PetRecognitionService extends BaseService {
       queuedSpaceIds.add(spaceId);
       await this.jobRepository.queue({ name: JobName.SharedSpaceFaceMatch, data: { spaceId, assetId } });
     }
+  }
+
+  private async matchKnownPet({
+    embedding,
+    identityMargin,
+    maxDistance,
+    ownerId,
+    referenceTopK,
+    species,
+  }: {
+    embedding: string;
+    identityMargin: number;
+    maxDistance: number;
+    ownerId: string;
+    referenceTopK: number;
+    species: string;
+  }) {
+    const cacheKey = `${ownerId}:${species}`;
+    const version = (await this.personRepository.getTrustedPetReferenceVersion({ ownerId, species })) ?? '0:';
+    let cached = this.trustedPetReferenceCache.get(cacheKey);
+    if (!cached || cached.version !== version) {
+      const references = preparePetRecognitionReferences(
+        (await this.personRepository.getTrustedPetReferences({ ownerId, species })) ?? [],
+      );
+      const refreshed: CachedPetReferences = { references, version };
+      this.trustedPetReferenceCache.set(cacheKey, refreshed);
+      cached = refreshed;
+    }
+
+    return matchKnownPet(embedding, cached.references, { identityMargin, maxDistance, referenceTopK });
+  }
+
+  private logKnownPetMatch(
+    detectionId: string,
+    species: string,
+    match: ReturnType<typeof matchKnownPet>,
+    threshold: number,
+  ) {
+    const best = match.best
+      ? `${match.best.name || match.best.personGroupId}:${match.best.distance.toFixed(4)}`
+      : 'none';
+    const second = match.second
+      ? `${match.second.name || match.second.personGroupId}:${match.second.distance.toFixed(4)}`
+      : 'none';
+    const candidates = match.candidates
+      .map(
+        (candidate, index) =>
+          `candidate[${index}]=${candidate.name || candidate.personGroupId}:` +
+          `top_k_distance=${candidate.distance.toFixed(4)} refs=${candidate.referenceCount}`,
+      )
+      .join(' ');
+    this.logger.debug(
+      `Pet known match detection=${detectionId} species=${species} trusted_refs=${match.trustedReferenceCount} ` +
+        `${candidates} best_pet=${best} second_pet=${second} ` +
+        `margin=${match.margin?.toFixed(4) ?? 'n/a'} threshold=${threshold} decision=${match.decision}`,
+    );
   }
 }

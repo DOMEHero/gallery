@@ -169,7 +169,10 @@ The default configuration looks like this:
     },
     "petRecognition": {
       "enabled": false,
+      "knownPetMatchingEnabled": true,
       "maxDistance": 0.55,
+      "identityMargin": 0.05,
+      "referenceTopK": 3,
       "minFaces": 1,
       "modelName": "pet-recognition-base"
     },

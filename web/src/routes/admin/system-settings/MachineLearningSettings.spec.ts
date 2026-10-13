@@ -48,8 +48,11 @@ const makeMachineLearningConfig = (
       petDetection: { enabled: false, modelName: 'yolo11s', minScore: 0.7, ...machineLearningOverrides.petDetection },
       petRecognition: {
         enabled: true,
+        knownPetMatchingEnabled: true,
         modelName: 'pet-recognition-base',
         maxDistance: 0.5,
+        identityMargin: 0.05,
+        referenceTopK: 3,
         minFaces: 2,
         ...machineLearningOverrides.petRecognition,
       },
