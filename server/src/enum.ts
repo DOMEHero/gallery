@@ -1046,6 +1046,7 @@ export enum JobName {
   // Pet Recognition
   PetRecognitionQueueAll = 'PetRecognitionQueueAll',
   PetRecognition = 'PetRecognition',
+  PersonalizedPetClassifierTrain = 'PersonalizedPetClassifierTrain',
 
   // Workflow
   WorkflowAssetTrigger = 'WorkflowAssetTrigger',

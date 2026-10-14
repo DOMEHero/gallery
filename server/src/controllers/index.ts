@@ -39,6 +39,7 @@ import { NotificationController } from 'src/controllers/notification.controller.
 import { OAuthController } from 'src/controllers/oauth.controller.js';
 import { PartnerController } from 'src/controllers/partner.controller.js';
 import { PersonController } from 'src/controllers/person.controller.js';
+import { PersonalizedPetModelController } from 'src/controllers/personalized-pet-model.controller.js';
 import { PluginController } from 'src/controllers/plugin.controller.js';
 import { QueueController } from 'src/controllers/queue.controller.js';
 import { SearchController } from 'src/controllers/search.controller.js';
@@ -95,6 +96,7 @@ export const controllers = [
   OAuthController,
   PartnerController,
   PersonController,
+  PersonalizedPetModelController,
   PluginController,
   QueueController,
   SearchController,

@@ -182,7 +182,24 @@ export class PetRecognitionService extends BaseService {
     let isCore = true;
     let rejectedKnownPetMatch = false;
 
+    if (species && this.personalizedPetClassifierService) {
+      const personalized = await this.personalizedPetClassifierService.classify({
+        ownerId,
+        species,
+        embedding,
+        config: machineLearning.petRecognition,
+      });
+      if (personalized) {
+        personId = personalized.personGroupId;
+        this.logger.debug(
+          `Personalized pet classifier matched face ${id} to ${personId} ` +
+            `(probability=${personalized.prediction.probability.toFixed(4)}, margin=${personalized.prediction.margin.toFixed(4)})`,
+        );
+      }
+    }
+
     if (
+      !personId &&
       knownPetMatchingEnabled &&
       species &&
       isRecognizablePetSpecies(species) &&

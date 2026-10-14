@@ -86,6 +86,7 @@ import { PersonGroupTable } from 'src/schema/tables/person-group.table.js';
 import { PersonUserTable } from 'src/schema/tables/person-user.table.js';
 import { PersonTable } from 'src/schema/tables/person.table.js';
 import { PetRecognitionReferenceTable } from 'src/schema/tables/pet-recognition-reference.table.js';
+import { PersonalizedPetModelTable } from 'src/schema/tables/personalized-pet-model.table.js';
 import { PetSearchTable } from 'src/schema/tables/pet-search.table.js';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table.js';
 import { PluginTable } from 'src/schema/tables/plugin.table.js';
@@ -201,6 +202,7 @@ export class ImmichDatabase {
     PersonGroupAuditTable,
     FacePersonVerdictTable,
     PetRecognitionReferenceTable,
+    PersonalizedPetModelTable,
     PetSearchTable,
     SessionTable,
     SharedLinkAssetTable,
@@ -370,6 +372,7 @@ export interface DB {
   face_person_verdict: FacePersonVerdictTable;
 
   pet_recognition_reference: PetRecognitionReferenceTable;
+  personalized_pet_model: PersonalizedPetModelTable;
   pet_search: PetSearchTable;
 
   session: SessionTable;

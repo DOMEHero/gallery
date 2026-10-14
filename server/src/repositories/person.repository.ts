@@ -84,6 +84,8 @@ export interface TrustedPetReference {
   name: string;
   personGroupId: string;
   species?: string | null;
+  assetId?: string;
+  fileCreatedAt?: Date;
 }
 
 export interface PersonStatistics {
@@ -1268,6 +1270,8 @@ export class PersonRepository {
       .innerJoin('pet_search', 'pet_search.faceId', 'asset_face.id')
       .select([
         'asset_face.id as faceId',
+        'asset_face.assetId',
+        'asset.fileCreatedAt',
         'person.personGroupId',
         'person.name',
         'person.species',

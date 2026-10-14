@@ -70,3 +70,5 @@
 1796000000000-AddAssetFaceCreatedBy
 1797000000000-AddAssetLocalDateTimeIndex
 1798000000000-AddPetRecognitionReferences
+1799000000000-AddPersonalizedPetModels
+1799000000001-AddPersonalizedPetModelUpdateId

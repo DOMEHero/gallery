@@ -33,6 +33,7 @@ import { NotificationService } from 'src/services/notification.service.js';
 import { OcrService } from 'src/services/ocr.service.js';
 import { PartnerService } from 'src/services/partner.service.js';
 import { PersonService } from 'src/services/person.service.js';
+import { PersonalizedPetClassifierService } from 'src/services/personalized-pet-classifier.service.js';
 import { PetDetectionService } from 'src/services/pet-detection.service.js';
 import { PetRecognitionService } from 'src/services/pet-recognition.service.js';
 import { PluginService } from 'src/services/plugin.service.js';
@@ -99,6 +100,7 @@ export const services = [
   PartnerService,
   PetDetectionService,
   PetRecognitionService,
+  PersonalizedPetClassifierService,
   PersonService,
   PluginService,
   QueueService,

@@ -88,6 +88,7 @@ import { WorkflowRepository } from 'src/repositories/workflow.repository.js';
 import { DB } from 'src/schema/index.js';
 import { AuthService } from 'src/services/auth.service.js';
 import { BaseService } from 'src/services/base.service.js';
+import { PersonalizedPetClassifierService } from 'src/services/personalized-pet-classifier.service.js';
 import { getKyselyConfig } from 'src/utils/database.js';
 import { ClusterGroupFactory } from 'test/factories/cluster-group.factory.js';
 import { IAccessRepositoryMock, newAccessRepositoryMock } from 'test/repositories/access.repository.mock.js';
@@ -287,6 +288,7 @@ export type ServiceOverrides = {
   oauth: OAuthRepository;
   partner: PartnerRepository;
   person: PersonRepository;
+  personalizedPetClassifier: PersonalizedPetClassifierService;
   personUser: PersonUserRepository;
   plugin: PluginRepository;
   process: ProcessRepository;
@@ -390,6 +392,7 @@ export const getMocks = () => {
     oauth: automock(OAuthRepository, { args: [loggerMock] }),
     partner: automock(PartnerRepository, { strict: false }),
     person: automock(PersonRepository, { strict: false }),
+    personalizedPetClassifier: automock(PersonalizedPetClassifierService, { strict: false }),
     personUser: automock(PersonUserRepository, { strict: false }),
     plugin: automock(PluginRepository, { strict: true, args: [databaseMock, loggerMock] }),
     process: automock(ProcessRepository),
@@ -500,6 +503,8 @@ export const newTestService = <T extends BaseService>(
     overrides.view || (mocks.view as As<ViewRepository>),
     overrides.websocket || (mocks.websocket as As<WebsocketRepository>),
     overrides.workflow || (mocks.workflow as As<WorkflowRepository>),
+    overrides.personalizedPetClassifier ||
+      (mocks.personalizedPetClassifier as unknown as PersonalizedPetClassifierService),
   );
 
   return {

@@ -56,6 +56,11 @@ describe(MachineLearningRepository.name, () => {
       identityMargin: 0.05,
       referenceTopK: 3,
       minFaces: 1,
+      personalizedClassifierEnabled: false,
+      personalizedClassifierMinSamples: 10,
+      personalizedClassifierMinProbability: 0.75,
+      personalizedClassifierMinMargin: 0.15,
+      personalizedClassifierReferenceValidation: true,
     },
   };
 

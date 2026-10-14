@@ -84,6 +84,7 @@ import { WorkflowRepository } from 'src/repositories/workflow.repository.js';
 import { UserTable } from 'src/schema/tables/user.table.js';
 import { FaceAssignmentService } from 'src/services/face-assignment.service.js';
 import { IdentityMergePropagationService } from 'src/services/identity-merge-propagation.service.js';
+import { PersonalizedPetClassifierService } from 'src/services/personalized-pet-classifier.service.js';
 import {
   AccessPersonRequest,
   AccessRequest,
@@ -178,6 +179,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   ViewRepository,
   WebsocketRepository,
   WorkflowRepository,
+  PersonalizedPetClassifierService,
 ] as const;
 
 @Injectable()
@@ -253,6 +255,7 @@ export class BaseService {
     protected viewRepository: ViewRepository,
     protected websocketRepository: WebsocketRepository,
     protected workflowRepository: WorkflowRepository,
+    protected personalizedPetClassifierService: PersonalizedPetClassifierService,
   ) {
     this.logger.setContext(this.constructor.name);
     this.storageCore = StorageCore.create(
@@ -351,6 +354,7 @@ export class BaseService {
       ctx.viewRepository,
       ctx.websocketRepository,
       ctx.workflowRepository,
+      ctx.personalizedPetClassifierService,
     );
 
     service.logger.setContext(BaseService.name);

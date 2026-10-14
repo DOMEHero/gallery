@@ -589,6 +589,7 @@ export type JobItem =
   // Pet Recognition
   | { name: JobName.PetRecognitionQueueAll; data: INightlyJob }
   | { name: JobName.PetRecognition; data: IPetRecognitionJob }
+  | { name: JobName.PersonalizedPetClassifierTrain; data: { ownerId: string } }
 
   // Workflow
   | { name: JobName.WorkflowAssetTrigger; data: { workflowId: string; assetId: string } }

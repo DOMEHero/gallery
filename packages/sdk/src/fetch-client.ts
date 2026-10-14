@@ -293,6 +293,16 @@ export type AdminConfigPetRecognitionDto = {
     minFaces: number;
     /** Name of the model to use */
     modelName: string;
+    /** Use an explicitly trained per-user linear pet classifier before generic matching */
+    personalizedClassifierEnabled: boolean;
+    /** Minimum classifier probability margin over the runner-up */
+    personalizedClassifierMinMargin: number;
+    /** Minimum classifier probability for an automatic personalized match */
+    personalizedClassifierMinProbability: number;
+    /** Minimum trusted samples required for each pet identity */
+    personalizedClassifierMinSamples: number;
+    /** Require the existing trusted-reference distance check before accepting a classifier match */
+    personalizedClassifierReferenceValidation: boolean;
     /** Number of closest confirmed pet references to average for each identity */
     referenceTopK: number;
 };
@@ -2525,6 +2535,27 @@ export type MergePersonDto = {
     /** Person IDs to merge */
     ids: string[];
 };
+export type PersonalizedPetModelResponseDto = {
+    activatedAt: string | null;
+    classes: string[];
+    createdAt: string;
+    embeddingDimension: number;
+    embeddingModel: string;
+    error: string | null;
+    id: string;
+    metadata: {
+        [key: string]: any;
+    } | null;
+    metrics: {
+        [key: string]: any;
+    } | null;
+    normalization: Normalization;
+    species: string;
+    status: Status2;
+    updatedAt: string;
+    version: string;
+};
+export type PersonalizedPetModelListResponseDto = PersonalizedPetModelResponseDto[];
 export type MergeScopedPeopleDto = {
     /** Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge. */
     confirmCrossOwner?: boolean;
@@ -7887,6 +7918,68 @@ export function mergePeople({ mergePersonDto }: {
     })));
 }
 /**
+ * List personalized pet models
+ */
+export function list(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PersonalizedPetModelListResponseDto;
+    }>("/people/personalized-pet-models", {
+        ...opts
+    }));
+}
+/**
+ * Train personalized pet models
+ */
+export function train(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText("/people/personalized-pet-models/train", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Activate a personalized pet model
+ */
+export function activate({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: PersonalizedPetModelResponseDto;
+    }>(`/people/personalized-pet-models/${encodeURIComponent(id)}/activate`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Deactivate a personalized pet model
+ */
+export function deactivate({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: PersonalizedPetModelResponseDto;
+    }>(`/people/personalized-pet-models/${encodeURIComponent(id)}/deactivate`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Roll back a personalized pet model
+ */
+export function rollback({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: PersonalizedPetModelResponseDto;
+    }>(`/people/personalized-pet-models/${encodeURIComponent(id)}/rollback`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * Merge scoped people by identity
  */
 export function mergeScopedPeople({ mergeScopedPeopleDto }: {
@@ -10129,7 +10222,7 @@ export function getEstimate({ direction }: {
 /**
  * Rollback a storage migration batch
  */
-export function rollback({ batchId }: {
+export function rollback2({ batchId }: {
     batchId: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchText(`/storage-migration/rollback/${encodeURIComponent(batchId)}`, {
@@ -11688,6 +11781,16 @@ export enum Type2 {
     Person = "person",
     SpacePerson = "space-person"
 }
+export enum Normalization {
+    L2 = "l2"
+}
+export enum Status2 {
+    Training = "training",
+    Candidate = "candidate",
+    Active = "active",
+    Disabled = "disabled",
+    Failed = "failed"
+}
 export enum SharingDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
@@ -11771,6 +11874,7 @@ export enum JobName {
     PetDetection = "PetDetection",
     PetRecognitionQueueAll = "PetRecognitionQueueAll",
     PetRecognition = "PetRecognition",
+    PersonalizedPetClassifierTrain = "PersonalizedPetClassifierTrain",
     WorkflowAssetTrigger = "WorkflowAssetTrigger",
     IntegrityUntrackedFilesQueueAll = "IntegrityUntrackedFilesQueueAll",
     IntegrityUntrackedFiles = "IntegrityUntrackedFiles",

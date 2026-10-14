@@ -131,6 +131,29 @@ export const GalleryPetRecognitionSchema = z
     // is passed straight through as the NN window size, so a larger value would make every
     // recognition job throw rather than being rejected at save time.
     minFaces: z.int().min(1).max(1000).describe('Minimum number of faces required for recognition'),
+    personalizedClassifierEnabled: z
+      .boolean()
+      .describe('Use an explicitly trained per-user linear pet classifier before generic matching'),
+    personalizedClassifierMinSamples: z
+      .int()
+      .min(10)
+      .max(1000)
+      .describe('Minimum trusted samples required for each pet identity'),
+    personalizedClassifierMinProbability: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .max(1)
+      .describe('Minimum classifier probability for an automatic personalized match'),
+    personalizedClassifierMinMargin: z
+      .number()
+      .meta({ format: 'double' })
+      .min(0)
+      .max(1)
+      .describe('Minimum classifier probability margin over the runner-up'),
+    personalizedClassifierReferenceValidation: z
+      .boolean()
+      .describe('Require the existing trusted-reference distance check before accepting a classifier match'),
   })
   .meta({ id: 'AdminConfigPetRecognitionDto' });
 
@@ -179,6 +202,11 @@ export const galleryMachineLearningDefaults = {
     identityMargin: 0.05,
     referenceTopK: 3,
     minFaces: 1,
+    personalizedClassifierEnabled: false,
+    personalizedClassifierMinSamples: 10,
+    personalizedClassifierMinProbability: 0.75,
+    personalizedClassifierMinMargin: 0.15,
+    personalizedClassifierReferenceValidation: true,
   },
 };
 

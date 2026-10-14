@@ -11387,6 +11387,262 @@
         "x-immich-state": "Stable"
       }
     },
+    "/people/personalized-pet-models": {
+      "get": {
+        "description": "List versioned personalized pet classifiers owned by the authenticated user.",
+        "operationId": "list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalizedPetModelListResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List personalized pet models",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.read",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/personalized-pet-models/train": {
+      "post": {
+        "description": "Queue training from scratch using only trusted pet references. New models remain candidates.",
+        "operationId": "train",
+        "parameters": [],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Train personalized pet models",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.update",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/personalized-pet-models/{id}/activate": {
+      "post": {
+        "description": "Activate one candidate model for its species and disable the previously active version.",
+        "operationId": "activate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalizedPetModelResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Activate a personalized pet model",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.update",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/personalized-pet-models/{id}/deactivate": {
+      "post": {
+        "description": "Disable a personalized classifier without changing stored candidates or references.",
+        "operationId": "deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalizedPetModelResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Deactivate a personalized pet model",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.update",
+        "x-immich-state": "Stable"
+      }
+    },
+    "/people/personalized-pet-models/{id}/rollback": {
+      "post": {
+        "description": "Activate a previously saved version for its species.",
+        "operationId": "rollback",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalizedPetModelResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Roll back a personalized pet model",
+        "tags": [
+          "People"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2",
+            "state": "Added"
+          },
+          {
+            "version": "v2",
+            "state": "Stable"
+          }
+        ],
+        "x-immich-permission": "person.update",
+        "x-immich-state": "Stable"
+      }
+    },
     "/people/same-person": {
       "post": {
         "description": "Mark personal and space people as the same person without exposing raw face identity IDs.",
@@ -28176,6 +28432,34 @@
             "minLength": 1,
             "type": "string"
           },
+          "personalizedClassifierEnabled": {
+            "description": "Use an explicitly trained per-user linear pet classifier before generic matching",
+            "type": "boolean"
+          },
+          "personalizedClassifierMinMargin": {
+            "description": "Minimum classifier probability margin over the runner-up",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "personalizedClassifierMinProbability": {
+            "description": "Minimum classifier probability for an automatic personalized match",
+            "format": "double",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "personalizedClassifierMinSamples": {
+            "description": "Minimum trusted samples required for each pet identity",
+            "maximum": 1000,
+            "minimum": 10,
+            "type": "integer"
+          },
+          "personalizedClassifierReferenceValidation": {
+            "description": "Require the existing trusted-reference distance check before accepting a classifier match",
+            "type": "boolean"
+          },
           "referenceTopK": {
             "description": "Number of closest confirmed pet references to average for each identity",
             "maximum": 10,
@@ -28190,6 +28474,11 @@
           "maxDistance",
           "minFaces",
           "modelName",
+          "personalizedClassifierEnabled",
+          "personalizedClassifierMinMargin",
+          "personalizedClassifierMinProbability",
+          "personalizedClassifierMinSamples",
+          "personalizedClassifierReferenceValidation",
           "referenceTopK"
         ],
         "type": "object"
@@ -32970,6 +33259,7 @@
           "PetDetection",
           "PetRecognitionQueueAll",
           "PetRecognition",
+          "PersonalizedPetClassifierTrain",
           "WorkflowAssetTrigger",
           "IntegrityUntrackedFilesQueueAll",
           "IntegrityUntrackedFiles",
@@ -36415,6 +36705,101 @@
           "type": "object"
         },
         "type": "array"
+      },
+      "PersonalizedPetModelListResponseDto": {
+        "items": {
+          "$ref": "#/components/schemas/PersonalizedPetModelResponseDto"
+        },
+        "type": "array"
+      },
+      "PersonalizedPetModelResponseDto": {
+        "properties": {
+          "activatedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "embeddingDimension": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "embeddingModel": {
+            "type": "string"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "metrics": {
+            "additionalProperties": {},
+            "nullable": true,
+            "type": "object"
+          },
+          "normalization": {
+            "enum": [
+              "l2"
+            ],
+            "type": "string"
+          },
+          "species": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "training",
+              "candidate",
+              "active",
+              "disabled",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "activatedAt",
+          "classes",
+          "createdAt",
+          "embeddingDimension",
+          "embeddingModel",
+          "error",
+          "id",
+          "metadata",
+          "metrics",
+          "normalization",
+          "species",
+          "status",
+          "updatedAt",
+          "version"
+        ],
+        "type": "object"
       },
       "PinCodeChangeDto": {
         "properties": {

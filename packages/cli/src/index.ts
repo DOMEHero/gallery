@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { upload } from 'src/commands/asset.js';
 import { login, logout } from 'src/commands/auth.js';
+import { personalizedPetClassifier } from 'src/commands/personalized-pet-classifier.js';
 import { serverInfo } from 'src/commands/server-info.js';
 import { version } from '../package.json';
 
@@ -40,6 +41,23 @@ program
   .command('server-info')
   .description('Display server information')
   .action(() => serverInfo(program.opts()));
+
+const petClassifier = program.command('pet-classifier').description('Train and manage personalized pet classifiers');
+
+for (const action of ['train', 'list'] as const) {
+  petClassifier
+    .command(action)
+    .description(action === 'train' ? 'Queue training from trusted references' : 'List saved model versions')
+    .action(() => personalizedPetClassifier(action, undefined, program.opts()));
+}
+
+for (const action of ['activate', 'rollback', 'deactivate'] as const) {
+  petClassifier
+    .command(action)
+    .description(`${action} a saved model version`)
+    .argument('<model-id>', 'Model UUID')
+    .action((modelId) => personalizedPetClassifier(action, modelId, program.opts()));
+}
 
 program
   .command('upload')

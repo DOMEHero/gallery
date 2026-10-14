@@ -8,8 +8,17 @@
   import FormatMessage from '$lib/elements/FormatMessage.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
+  import { handleError } from '$lib/utils/handle-error';
+  import {
+    activate as activatePersonalizedPetModel,
+    deactivate as deactivatePersonalizedPetModel,
+    list as listPersonalizedPetModels,
+    Status2,
+    train as trainPersonalizedPetModels,
+    type PersonalizedPetModelResponseDto,
+  } from '@immich/sdk';
   import { Button, IconButton, modalManager, Text } from '@immich/ui';
-  import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
+  import { mdiPlus, mdiRefresh, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
   import { untrack } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -18,6 +27,69 @@
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+  let personalizedPetModels = $state<PersonalizedPetModelResponseDto[]>([]);
+  let personalizedPetModelsLoading = $state(false);
+  let personalizedPetTraining = $state(false);
+  let personalizedPetModelActionId = $state<string | undefined>();
+
+  const refreshPersonalizedPetModels = async () => {
+    personalizedPetModelsLoading = true;
+    try {
+      personalizedPetModels = await listPersonalizedPetModels();
+    } finally {
+      personalizedPetModelsLoading = false;
+    }
+  };
+
+  const trainPersonalizedPetModelsNow = async () => {
+    personalizedPetTraining = true;
+    try {
+      await trainPersonalizedPetModels();
+      await refreshPersonalizedPetModels();
+    } finally {
+      personalizedPetTraining = false;
+    }
+  };
+
+  const setPersonalizedPetModelActive = async (model: PersonalizedPetModelResponseDto) => {
+    if (personalizedPetModelActionId) {
+      return;
+    }
+
+    personalizedPetModelActionId = model.id;
+    try {
+      const updated = await (model.status === 'active'
+        ? deactivatePersonalizedPetModel({ id: model.id })
+        : activatePersonalizedPetModel({ id: model.id }));
+
+      // The response is authoritative. Update the row immediately instead of depending on a
+      // follow-up GET (which can briefly be stale behind a proxy/browser cache). Activating a
+      // version also disables any previous active version for the same species.
+      personalizedPetModels = personalizedPetModels.map((current) => {
+        if (current.id === updated.id) {
+          return updated;
+        }
+        if (updated.status === 'active' && current.species === updated.species && current.status === 'active') {
+          return { ...current, status: Status2.Disabled, activatedAt: null };
+        }
+        return current;
+      });
+    } catch (error) {
+      handleError(error, $t('errors.something_went_wrong'));
+    } finally {
+      personalizedPetModelActionId = undefined;
+    }
+  };
+
+  const modelAccuracy = (model: PersonalizedPetModelResponseDto, key: 'test' | 'baseline') => {
+    const metrics = model.metrics?.[key];
+    return typeof metrics === 'object' &&
+      metrics !== null &&
+      'accuracy' in metrics &&
+      typeof metrics.accuracy === 'number'
+      ? `${(metrics.accuracy * 100).toFixed(1)}%`
+      : undefined;
+  };
 
   $effect(() => {
     if (disabled) {
@@ -571,6 +643,112 @@
             isEdited={configToEdit.machineLearning.petRecognition.minFaces !==
               config.machineLearning.petRecognition.minFaces}
           />
+
+          <hr />
+
+          <SettingSwitch
+            title={$t('admin.machine_learning_pet_personalized_enabled')}
+            subtitle={$t('admin.machine_learning_pet_personalized_enabled_description')}
+            bind:checked={configToEdit.machineLearning.petRecognition.personalizedClassifierEnabled}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.petRecognition.enabled}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_personalized_min_samples')}
+            description={$t('admin.machine_learning_pet_personalized_min_samples_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.personalizedClassifierMinSamples}
+            step="1"
+            min={10}
+            max={1000}
+            disabled={disabled || !configToEdit.machineLearning.petRecognition.personalizedClassifierEnabled}
+            isEdited={configToEdit.machineLearning.petRecognition.personalizedClassifierMinSamples !==
+              config.machineLearning.petRecognition.personalizedClassifierMinSamples}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_personalized_min_probability')}
+            description={$t('admin.machine_learning_pet_personalized_min_probability_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.personalizedClassifierMinProbability}
+            step="0.01"
+            min={0}
+            max={1}
+            disabled={disabled || !configToEdit.machineLearning.petRecognition.personalizedClassifierEnabled}
+            isEdited={configToEdit.machineLearning.petRecognition.personalizedClassifierMinProbability !==
+              config.machineLearning.petRecognition.personalizedClassifierMinProbability}
+          />
+
+          <SettingInputField
+            inputType={SettingInputFieldType.NUMBER}
+            label={$t('admin.machine_learning_pet_personalized_min_margin')}
+            description={$t('admin.machine_learning_pet_personalized_min_margin_description')}
+            bind:value={configToEdit.machineLearning.petRecognition.personalizedClassifierMinMargin}
+            step="0.01"
+            min={0}
+            max={1}
+            disabled={disabled || !configToEdit.machineLearning.petRecognition.personalizedClassifierEnabled}
+            isEdited={configToEdit.machineLearning.petRecognition.personalizedClassifierMinMargin !==
+              config.machineLearning.petRecognition.personalizedClassifierMinMargin}
+          />
+
+          <SettingSwitch
+            title={$t('admin.machine_learning_pet_personalized_reference_validation')}
+            subtitle={$t('admin.machine_learning_pet_personalized_reference_validation_description')}
+            bind:checked={configToEdit.machineLearning.petRecognition.personalizedClassifierReferenceValidation}
+            disabled={disabled || !configToEdit.machineLearning.petRecognition.personalizedClassifierEnabled}
+          />
+
+          <div class="flex flex-wrap justify-end gap-2">
+            <Button
+              size="small"
+              shape="round"
+              leadingIcon={mdiRefresh}
+              onclick={() => void refreshPersonalizedPetModels()}
+              disabled={personalizedPetModelsLoading}
+            >
+              {$t('admin.machine_learning_pet_personalized_refresh')}
+            </Button>
+            <Button
+              size="small"
+              shape="round"
+              onclick={() => void trainPersonalizedPetModelsNow()}
+              disabled={personalizedPetTraining || disabled}
+            >
+              {$t('admin.machine_learning_pet_personalized_train')}
+            </Button>
+          </div>
+
+          {#each personalizedPetModels as model (model.id)}
+            <div class="flex items-center justify-between rounded-sm border p-2 text-sm">
+              <span>
+                {model.species} · {model.version} · {model.status}
+                {#if modelAccuracy(model, 'test')}
+                  · {$t('admin.machine_learning_pet_personalized_test_accuracy')}: {modelAccuracy(model, 'test')}
+                {/if}
+                {#if modelAccuracy(model, 'baseline')}
+                  · {$t('admin.machine_learning_pet_personalized_baseline_accuracy')}: {modelAccuracy(
+                    model,
+                    'baseline',
+                  )}
+                {/if}
+              </span>
+              {#if ![Status2.Training, Status2.Failed].includes(model.status)}
+                <Button
+                  size="small"
+                  shape="round"
+                  disabled={personalizedPetModelActionId === model.id}
+                  onclick={() => void setPersonalizedPetModelActive(model)}
+                >
+                  {model.status === 'active'
+                    ? $t('admin.machine_learning_pet_personalized_disable')
+                    : $t('admin.machine_learning_pet_personalized_activate')}
+                </Button>
+              {/if}
+            </div>
+          {/each}
         </div>
       </SettingAccordion>
       <SettingButtonsRow bind:configToEdit keys={['machineLearning']} {disabled} {onBeforeSave} />
